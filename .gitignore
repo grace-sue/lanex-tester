@@ -53,3 +53,5 @@ reports/
 testIperf/
 LAN-EX-Tester
 
+.agents/
+

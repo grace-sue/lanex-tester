@@ -99,7 +99,12 @@ namespace LANEXTest {
             clientThreads[i].join();
         } 
 
-        return errorWhileTesting;
+        // Check for errors while testing
+        if(errorWhileTesting != -1) {
+            return errorWhileTesting;
+        }
+
+        return 0;
     }
 
     bool startTest(ConfigureTest::testConfiguration *tc, 
@@ -124,10 +129,8 @@ namespace LANEXTest {
 
             // Start test in one direction 
             int errCode = startTestRound(&testData, tc, serverConf, false);
-            if(errCode != -1) {
-                std::string msg = "An error has occoured while testing pair ";
-                msg += std::to_string(errCode + 1);
-                InterfaceUtils::createNewPage("Error while testing", msg, 
+            if(errCode != 0) {
+                InterfaceUtils::createNewPage("Error while testing", "An error has occoured while testing", 
                                                 "Do you want to restart the test? (y/n)");
                 char userInput = getch();
                 if(userInput == 'y' || userInput == 'Y') {
@@ -140,10 +143,8 @@ namespace LANEXTest {
             }
 
             errCode = startTestRound(&testData, tc, serverConf, true);
-            if(errCode != -1) {
-                std::string msg = "An error has occoured while testing pair ";
-                msg += std::to_string(errCode + 1);
-                InterfaceUtils::createNewPage("Error while testing", msg, 
+            if(errCode != 0) {
+                InterfaceUtils::createNewPage("Error while testing", "An error has occoured while testing", 
                                                 "Do you want to restart the test? (y/n)");
                 
                 char userInput = getch();

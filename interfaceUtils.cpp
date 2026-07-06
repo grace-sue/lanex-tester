@@ -65,7 +65,7 @@ namespace InterfaceUtils {
             line1 += std::to_string(i + 1);
             line1 += ":\t\t\t\tTX\t\tRX\n";
             std::string line2 = tc->serialNumberPairs[i];
-            line2 += "\t\t\tWAIT\t\tWAIT\n";
+            line2 += "\t\t\ttmp\t\ttmp\n";
 
             printw(line1.c_str());
             printw(line2.c_str());
@@ -90,8 +90,6 @@ namespace InterfaceUtils {
     void updateTxOfPair(int pairN, std::string val) {
         //32
         move(3 + 3*pairN + 1, 32);
-        printw("        ");
-        move(3 + 3*pairN + 1, 32);
         printw(val.c_str());
         moveCursorOutOfScreen();
         refresh();
@@ -110,8 +108,6 @@ namespace InterfaceUtils {
 
     void updateRxOfPair(int pairN, std::string val) {
         //48
-        move(3 + 3*pairN + 1, 48);
-        printw("        ");
         move(3 + 3*pairN + 1, 48);
         printw(val.c_str());
         moveCursorOutOfScreen();
