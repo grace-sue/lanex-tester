@@ -108,7 +108,7 @@ namespace IperfExecutor {
         cmd += "ssh ";
         cmd += "ubnt@";
         cmd += remoteAddress;
-        cmd += " -o LogLevel=QUIET -t iperf3 -c ";
+        cmd += " -o LogLevel=QUIET -tt iperf3 --forceflush -c ";
         cmd += serverAddress;
         cmd += " --port ";
         cmd += std::to_string(serverPort);
