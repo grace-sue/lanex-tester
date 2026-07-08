@@ -1,0 +1,286 @@
+<title>LAN-EX Tester — Terminal UI Mockups</title>
+<style>
+  :root {
+    --bg:#eceff1; --panel:#ffffff; --ink:#152229; --muted:#5b6e76; --muted-2:#7c8d94;
+    --border:#d2dcdf; --hair:#e2e9eb; --accent:#0c7d86; --accent-ink:#0a5b62;
+    --pass:#1f8a5b; --warn:#a86a12; --fail:#b5372a;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+    /* terminal "device screen" — fixed dark, independent of page theme */
+    --t-bg:#0b1113; --t-bar:#0f1719; --t-fg:#cbd8d4; --t-dim:#7d9094; --t-faint:#48595d;
+    --t-line:#1e2c2f; --t-teal:#3ad2c4; --t-green:#4cd88a; --t-amber:#e8b552; --t-red:#f26d5b;
+    --t-glow: rgba(58,210,196,.55);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0c1315; --panel:#141f22; --ink:#e3edef; --muted:#93a7ad; --muted-2:#849599;
+      --border:#26363b; --hair:#1c2a2e; --accent:#2bc0b3; --accent-ink:#77e2d8;
+      --pass:#3ecb86; --warn:#e0a54a; --fail:#ef6c5a; }
+  }
+  :root[data-theme="light"] { --bg:#eceff1; --panel:#ffffff; --ink:#152229; --muted:#5b6e76; --muted-2:#7c8d94;
+    --border:#d2dcdf; --hair:#e2e9eb; --accent:#0c7d86; --accent-ink:#0a5b62; --pass:#1f8a5b; --warn:#a86a12; --fail:#b5372a; }
+  :root[data-theme="dark"] { --bg:#0c1315; --panel:#141f22; --ink:#e3edef; --muted:#93a7ad; --muted-2:#849599;
+    --border:#26363b; --hair:#1c2a2e; --accent:#2bc0b3; --accent-ink:#77e2d8; --pass:#3ecb86; --warn:#e0a54a; --fail:#ef6c5a; }
+
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-sans);
+         -webkit-font-smoothing:antialiased; line-height:1.5; }
+  .wrap { max-width: 760px; margin:0 auto; padding: 46px 20px 80px; }
+
+  .eyebrow { font-family:var(--font-mono); font-size:12px; letter-spacing:.22em; text-transform:uppercase;
+             color:var(--accent); font-weight:600; display:flex; align-items:center; gap:10px; }
+  .eyebrow::after { content:""; height:1px; flex:1; background:var(--hair); }
+  h1 { font-size:clamp(24px,4.5vw,32px); font-weight:660; letter-spacing:-.015em; margin:14px 0 8px; text-wrap:balance; }
+  .lede { color:var(--muted); font-size:15px; max-width:62ch; margin:0; }
+
+  /* legend of status glyphs */
+  .glyphs { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:22px; padding-top:18px;
+            border-top:1px solid var(--hair); font-family:var(--font-mono); font-size:11.5px; color:var(--muted-2); }
+  .glyphs span { display:inline-flex; align-items:center; gap:7px; }
+  .g { font-weight:700; }
+  .g.run{color:var(--accent);} .g.ok{color:var(--pass);} .g.warn{color:var(--warn);}
+  .g.fail{color:var(--fail);} .g.wait{color:var(--muted-2);}
+
+  /* screen block */
+  .screen { margin-top: 40px; }
+  .screen-cap { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .screen-cap .st { font-family:var(--font-mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+                    color:var(--accent-ink); font-weight:700; }
+  .screen-cap h2 { font-size:17px; font-weight:620; margin:0; letter-spacing:-.01em; }
+  .screen-cap p { flex-basis:100%; margin:2px 0 0; font-size:13.5px; color:var(--muted); }
+  .feats { display:flex; flex-wrap:wrap; gap:6px; margin-top:11px; }
+  .feat { font-family:var(--font-mono); font-size:10.5px; letter-spacing:.03em; text-transform:uppercase;
+          color:var(--muted-2); background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:3px 7px; }
+
+  /* ---------- terminal ---------- */
+  .term-scroll { overflow-x:auto; border-radius:9px; box-shadow: 0 1px 2px rgba(20,40,48,.06), 0 14px 34px -18px rgba(10,25,30,.55); }
+  .term { min-width: 520px; background:var(--t-bg); color:var(--t-fg); font-family:var(--font-mono);
+          font-size:13px; line-height:1.65; border:1px solid #233236; border-radius:9px; overflow:hidden;
+          position:relative; }
+  .term::after { /* faint scanlines */
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background:repeating-linear-gradient(0deg, rgba(255,255,255,.014) 0 1px, transparent 1px 3px);
+  }
+  .bar { display:flex; align-items:center; gap:10px; background:var(--t-bar); border-bottom:1px solid var(--t-line);
+         padding:8px 14px; font-size:12px; color:var(--t-dim); }
+  .bar .name { color:var(--t-fg); font-weight:600; letter-spacing:.02em; }
+  .bar .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .live { color:var(--t-teal); font-weight:600; display:inline-flex; align-items:center; gap:6px; }
+  .dot { width:8px; height:8px; border-radius:999px; background:var(--t-red);
+         box-shadow:0 0 0 0 rgba(242,109,91,.6); animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(242,109,91,.5);} 70%{box-shadow:0 0 0 7px transparent;} 100%{box-shadow:0 0 0 0 transparent;} }
+  @media (prefers-reduced-motion:reduce){ .dot{animation:none;} }
+  kbd { font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--t-fg);
+        background:#16211f; border:1px solid #2a3b3d; border-bottom-width:2px; border-radius:4px; padding:0 5px; }
+
+  .body { padding:13px 16px 15px; position:relative; z-index:1; }
+  .meta { display:flex; flex-wrap:wrap; gap:4px 22px; color:var(--t-dim); }
+  .meta b { color:var(--t-fg); font-weight:600; }
+  .rule { height:0; border-top:1px solid var(--t-line); margin:10px 0; }
+  .phase { color:var(--t-teal); }
+  .hint { color:var(--t-dim); } .hint .arw{ color:var(--t-teal); }
+  .dim { color:var(--t-dim); } .faint { color:var(--t-faint); }
+  .teal{color:var(--t-teal);} .green{color:var(--t-green);} .amber{color:var(--t-amber);} .red{color:var(--t-red);}
+
+  /* data table via grid */
+  .tbl { display:grid; align-items:center; }
+  .tbl > div { padding:1px 0; }
+  .thead { color:var(--t-dim); border-bottom:1px solid var(--t-line); padding-bottom:5px !important; margin-bottom:3px; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+
+  .t-a { grid-template-columns: 3.2rem 11.5rem 5.6rem 5.6rem 4rem 6.2rem; }
+  .t-b { grid-template-columns: 3.2rem 5.2rem 5.2rem 4rem 1fr; }
+  .t-s { grid-template-columns: 3.2rem 11.5rem 8.4rem 4rem 6rem; }
+
+  .barline { margin-top:2px; }
+  .footline { color:var(--t-dim); }
+  .footline b { color:var(--t-fg); }
+  .input { color:var(--t-fg); }
+  .caret { color:var(--t-teal); }
+  .big { font-size:14px; }
+
+  .verdict-pass { color:var(--t-green); font-weight:700; }
+  .verdict-fail { color:var(--t-red); font-weight:700; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Terminal UI &mdash; Screen Mockups</div>
+    <h1>LAN-EX Tester &mdash; What the Operator Sees</h1>
+    <p class="lede">Mockups of the ncurses screens. The goal: at a glance the operator can tell
+      <b>what's running</b>, <b>how many pairs</b> are involved, <b>how far along</b> it is, and
+      <b>what passed or failed</b> &mdash; using consistent status colors and glyphs throughout.</p>
+
+    <div class="glyphs">
+      <span><i class="g run">&#9679;</i> running</span>
+      <span><i class="g ok">&#10003;</i> pass / done</span>
+      <span><i class="g warn">&#9888;</i> retry / warning</span>
+      <span><i class="g fail">&#10007;</i> fail</span>
+      <span><i class="g wait">&middot;</i> waiting</span>
+    </div>
+  </header>
+
+  <!-- 1 · Sign-in -->
+  <section class="screen">
+    <div class="screen-cap">
+      <span class="st">Stage 1</span><h2>Operator sign-in</h2>
+      <p>Clear step counter, a live input caret, and the timestamp captured automatically for the record.</p>
+    </div>
+    <div class="term-scroll"><div class="term">
+      <div class="bar"><span class="name">LAN-EX H/F Tester</span>
+        <span class="right"><span class="dim">Step 1 / 4</span> &nbsp;<kbd>b</kbd> <span class="dim">back</span></span></div>
+      <div class="body">
+        <div class="dim">Operator sign-in</div>
+        <div class="rule"></div>
+        <div>Operator initials &nbsp; <span class="input">GS</span><span class="caret">&#9611;</span></div>
+        <div class="dim" style="margin-top:6px;">Date / time &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="teal">2026-07-08&nbsp; 14:22:07</span></div>
+        <div class="rule"></div>
+        <div class="hint"><span class="arw">&#9656;</span> Enter your initials and press <kbd>&#9166;</kbd></div>
+      </div>
+    </div></div>
+    <div class="feats"><span class="feat">step 1/4</span><span class="feat">live caret</span><span class="feat">auto timestamp</span><span class="feat">back key</span></div>
+  </section>
+
+  <!-- 2 · Connectivity -->
+  <section class="screen">
+    <div class="screen-cap">
+      <span class="st">Stage 2</span><h2>Connectivity check</h2>
+      <p>Every pair is listed with its own live status, plus an overall progress bar and an <em>x / n pairs</em> count.</p>
+    </div>
+    <div class="term-scroll"><div class="term">
+      <div class="bar"><span class="name">LAN-EX H/F Tester</span>
+        <span class="right"><span class="dim">Pre-test connectivity</span></span></div>
+      <div class="body">
+        <div class="dim">Pinging all pairs before test&hellip;</div>
+        <div class="rule"></div>
+        <div class="tbl t-s">
+          <div class="dim thead">Pair</div><div class="dim thead">Address</div><div class="dim thead">State</div><div class="dim thead"></div><div class="dim thead num">Result</div>
+          <div>1</div><div class="dim">192.168.1.1</div><div class="green">&#9679; reachable</div><div></div><div class="green num">OK</div>
+          <div>2</div><div class="dim">192.168.2.1</div><div class="green">&#9679; reachable</div><div></div><div class="green num">OK</div>
+          <div>3</div><div class="dim">192.168.3.1</div><div class="teal">&#9680; checking&hellip;</div><div></div><div class="dim num">&mdash;</div>
+          <div>4</div><div class="dim">192.168.4.1</div><div class="faint">&middot; waiting</div><div></div><div class="faint num">&mdash;</div>
+          <div>5</div><div class="dim">192.168.5.1</div><div class="faint">&middot; waiting</div><div></div><div class="faint num">&mdash;</div>
+        </div>
+        <div class="rule"></div>
+        <div class="barline">Progress &nbsp;<span class="teal">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;</span><span class="faint">&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;</span> &nbsp;<b class="input">2 / 5 pairs</b> <span class="dim">(40%)</span></div>
+      </div>
+    </div></div>
+    <div class="feats"><span class="feat">per-pair status</span><span class="feat">spinner</span><span class="feat">progress %</span><span class="feat">x / n pairs</span></div>
+  </section>
+
+  <!-- 3 · Phase A monitor (hero) -->
+  <section class="screen">
+    <div class="screen-cap">
+      <span class="st">Stage 3 &middot; Phase A</span><h2>Live test monitor &mdash; max throughput</h2>
+      <p>The main screen. Header shows the run is <b>LIVE</b> and how to stop it; a status line carries operator,
+        config, cycle count and elapsed time; each pair updates in place; the active pair has its own countdown bar.</p>
+    </div>
+    <div class="term-scroll"><div class="term">
+      <div class="bar"><span class="name">LAN-EX H/F Tester</span>
+        <span class="right"><span class="live"><span class="dot"></span>LIVE</span> &nbsp;<span class="dim">press</span> <kbd>Q</kbd> <span class="dim">to stop &amp; report</span></span></div>
+      <div class="body">
+        <div class="meta"><span>Operator <b>GS</b></span><span>Config <b>HE-53</b></span><span>Cycle <b>4</b></span><span>Elapsed <b>00:14:32</b></span></div>
+        <div class="rule"></div>
+        <div class="phase">Phase A &middot; max throughput &mdash; sequential, 10s each direction</div>
+        <div class="rule"></div>
+        <div class="tbl t-a">
+          <div class="dim thead">Pair</div><div class="dim thead">Serial</div><div class="dim thead num">TX Mbps</div><div class="dim thead num">RX Mbps</div><div class="dim thead num">Drops</div><div class="dim thead">Status</div>
+          <div>1</div><div class="dim">1234567-7654321</div><div class="green num">941</div><div class="green num">939</div><div class="green num">0</div><div class="green">&#10003; done</div>
+          <div>2</div><div class="dim">2233445-5544332</div><div class="green num">938</div><div class="green num">942</div><div class="green num">0</div><div class="green">&#10003; done</div>
+          <div>3</div><div class="dim">3344556-6655443</div><div class="teal num">610&hellip;</div><div class="faint num">&mdash;</div><div class="green num">0</div><div class="teal">&#9679; TX 6s</div>
+          <div>4</div><div class="dim">4455667-7766554</div><div class="faint num">&mdash;</div><div class="faint num">&mdash;</div><div class="faint num">&mdash;</div><div class="faint">&middot; waiting</div>
+          <div>5</div><div class="dim">5566778-8877665</div><div class="faint num">&mdash;</div><div class="faint num">&mdash;</div><div class="faint num">&mdash;</div><div class="faint">&middot; waiting</div>
+        </div>
+        <div class="rule"></div>
+        <div class="barline">Pair 3 TX &nbsp;<span class="teal">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;</span><span class="faint">&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;</span> &nbsp;<span class="input">62%</span> &nbsp;<span class="dim">6s / 10s</span></div>
+        <div class="footline" style="margin-top:6px;">Totals &nbsp; pass <b class="green">2</b> &middot; fail <b>0</b> &middot; drops <b>0</b> &nbsp;&nbsp; <span class="dim">target &ge; 90 / 190 Mbps</span></div>
+      </div>
+    </div></div>
+    <div class="feats"><span class="feat">LIVE badge</span><span class="feat">stop-key hint</span><span class="feat">cycle #</span><span class="feat">elapsed clock</span><span class="feat">in-place TX/RX</span><span class="feat">drop count</span><span class="feat">countdown bar</span><span class="feat">running totals</span></div>
+  </section>
+
+  <!-- 4 · Phase B monitor -->
+  <section class="screen">
+    <div class="screen-cap">
+      <span class="st">Stage 3 &middot; Phase B</span><h2>Live test monitor &mdash; parallel soak</h2>
+      <p>Now all pairs run at once, both directions, capped at 10&nbsp;Mbps each. Every pair shows a live link bar so
+        a struggling pair is obvious, and the soak's own timer counts down.</p>
+    </div>
+    <div class="term-scroll"><div class="term">
+      <div class="bar"><span class="name">LAN-EX H/F Tester</span>
+        <span class="right"><span class="live"><span class="dot"></span>LIVE</span> &nbsp;<span class="dim">press</span> <kbd>Q</kbd> <span class="dim">to stop &amp; report</span></span></div>
+      <div class="body">
+        <div class="meta"><span>Operator <b>GS</b></span><span>Config <b>HE-53</b></span><span>Cycle <b>4</b></span><span>Elapsed <b>00:15:08</b></span></div>
+        <div class="rule"></div>
+        <div class="phase">Phase B &middot; parallel soak &mdash; all pairs, bidirectional, capped 10 Mbps</div>
+        <div class="rule"></div>
+        <div class="tbl t-b">
+          <div class="dim thead">Pair</div><div class="dim thead num">TX&#8593;</div><div class="dim thead num">RX&#8595;</div><div class="dim thead num">Drops</div><div class="dim thead">Link</div>
+          <div>1</div><div class="green num">9.9</div><div class="green num">9.9</div><div class="green num">0</div><div class="green">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;</div>
+          <div>2</div><div class="green num">9.9</div><div class="green num">9.8</div><div class="green num">0</div><div class="green">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;</div>
+          <div>3</div><div class="green num">9.9</div><div class="green num">9.9</div><div class="green num">0</div><div class="green">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;</div>
+          <div>4</div><div class="amber num">9.9</div><div class="amber num">7.2</div><div class="amber num">14</div><div class="amber">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9617;&#9617;&#9617;</div>
+          <div>5</div><div class="green num">9.9</div><div class="green num">9.9</div><div class="green num">0</div><div class="green">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;</div>
+        </div>
+        <div class="rule"></div>
+        <div class="barline">Soak &nbsp;&nbsp;&nbsp;&nbsp;<span class="teal">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;</span><span class="faint">&#9617;&#9617;&#9617;&#9617;</span> &nbsp;<span class="input">82%</span> &nbsp;<span class="dim">49s / 60s</span></div>
+        <div class="footline" style="margin-top:6px;">Watch &nbsp; <span class="amber">&#9888; pair 4 dropping traffic (14)</span></div>
+      </div>
+    </div></div>
+    <div class="feats"><span class="feat">all pairs at once</span><span class="feat">per-pair link bars</span><span class="feat">drop highlight</span><span class="feat">soak timer</span></div>
+  </section>
+
+  <!-- 5 · Error / retry -->
+  <section class="screen">
+    <div class="screen-cap">
+      <span class="st">Any stage</span><h2>Error &amp; auto-retry</h2>
+      <p>When something goes wrong the operator sees exactly which pair and why, the retry attempt in progress, and
+        confirmation that it was written to the report.</p>
+    </div>
+    <div class="term-scroll"><div class="term">
+      <div class="bar"><span class="name">LAN-EX H/F Tester</span>
+        <span class="right"><span class="amber">&#9888; error</span></span></div>
+      <div class="body">
+        <div><span class="red">&#10007; Pair 3</span> &mdash; iperf3 client did not respond <span class="dim">(ssh timeout after 5s)</span></div>
+        <div class="amber" style="margin-top:6px;">&#9888; Auto-retry <b>2 of 3</b>&hellip; <span class="dim">logged to report</span></div>
+        <div class="barline" style="margin-top:8px;"><span class="amber">&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;&#9608;</span><span class="faint">&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;&#9617;</span></div>
+        <div class="rule"></div>
+        <div class="hint">Retries exhausted? the pair is marked <span class="red">FAIL</span>, the run keeps going.</div>
+      </div>
+    </div></div>
+    <div class="feats"><span class="feat">which pair</span><span class="feat">plain-language cause</span><span class="feat">retry counter</span><span class="feat">logged confirmation</span></div>
+  </section>
+
+  <!-- 6 · Final report -->
+  <section class="screen">
+    <div class="screen-cap">
+      <span class="st">Stage 5</span><h2>Result summary</h2>
+      <p>After <kbd>Q</kbd>, a single verdict up top, the accountable header (operator, start&rarr;end, cycles), a
+        per-pair breakdown, and where the files were saved.</p>
+    </div>
+    <div class="term-scroll"><div class="term">
+      <div class="bar"><span class="name">LAN-EX H/F Tester</span>
+        <span class="right"><span class="dim">Result</span></span></div>
+      <div class="body">
+        <div class="big"><span class="verdict-pass">&#10003; PASS</span> &nbsp;<span class="dim">all 5 pairs met target &middot; 0 drops over 118 cycles</span></div>
+        <div class="rule"></div>
+        <div class="meta"><span>Operator <b>GS</b></span><span>Config <b>HE-53</b></span><span>Cycles <b>118</b></span></div>
+        <div class="meta" style="margin-top:2px;"><span class="dim">2026-07-08 14:22 &rarr; 15:07 &nbsp;(45m 12s)</span></div>
+        <div class="rule"></div>
+        <div class="tbl t-a">
+          <div class="dim thead">Pair</div><div class="dim thead">Serial</div><div class="dim thead num">TX Mbps</div><div class="dim thead num">RX Mbps</div><div class="dim thead num">Drops</div><div class="dim thead">Result</div>
+          <div>1</div><div class="dim">1234567-7654321</div><div class="num">941</div><div class="num">942</div><div class="num">0</div><div class="green">&#10003; PASS</div>
+          <div>2</div><div class="dim">2233445-5544332</div><div class="num">938</div><div class="num">940</div><div class="num">0</div><div class="green">&#10003; PASS</div>
+          <div>3</div><div class="dim">3344556-6655443</div><div class="num">939</div><div class="num">941</div><div class="num">0</div><div class="green">&#10003; PASS</div>
+          <div>4</div><div class="dim">4455667-7766554</div><div class="num">940</div><div class="num">938</div><div class="num">0</div><div class="green">&#10003; PASS</div>
+          <div>5</div><div class="dim">5566778-8877665</div><div class="num">941</div><div class="num">939</div><div class="num">0</div><div class="green">&#10003; PASS</div>
+        </div>
+        <div class="rule"></div>
+        <div class="dim">Saved &nbsp; <span class="teal">reports/HE-53_2233445.txt</span> &nbsp;&middot;&nbsp; <span class="teal">reports/eng/eng_HE-53_&hellip;.txt</span></div>
+        <div class="hint" style="margin-top:6px;"><span class="arw">&#9656;</span> Press any key to exit</div>
+      </div>
+    </div></div>
+    <div class="feats"><span class="feat">single verdict</span><span class="feat">accountable header</span><span class="feat">start &rarr; end time</span><span class="feat">per-pair results</span><span class="feat">saved paths</span></div>
+  </section>
+
+</div>

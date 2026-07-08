@@ -53,5 +53,7 @@ reports/
 testIperf/
 LAN-EX-Tester
 
+# Agents settings
 .agents/
+.claude/
 
