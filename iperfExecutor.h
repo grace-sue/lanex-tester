@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <array>
+#include <cstdlib>
 #include <string.h>
 #include "testData.h"
 #include "test.h"
@@ -32,7 +33,9 @@ namespace IperfExecutor {
     void startRemoteIperf3Client(int duration, LANEXTest::testData *td, int clientId, std::string remoteAddress, 
     std::string serverAddress, int serverPort, bool isReversed);
 
-    void startLocalIperf3Server(int serverPort);
+    void startLocalIperf3Server(int serverPort, int timeoutSeconds);
+
+    void stopLocalIperf3Server(int serverPort);
 }
 
 #endif

@@ -10,7 +10,12 @@ namespace ServerConfigurationLoader {
         std::ifstream file(path);
         if (file.is_open()){
             while (std::getline (file,line)) {
-                outVect.push_back(line);
+                if(!line.empty() && line[line.size() - 1] == '\r') {
+                    line.erase(line.size() - 1);
+                }
+                if(!line.empty()) {
+                    outVect.push_back(line);
+                }
             }
             file.close();
         }
@@ -20,6 +25,14 @@ namespace ServerConfigurationLoader {
 
     ServerConfiguration loadConfiguration() {
         ServerConfiguration outConf;
+        outConf.txTargetSpeed = 0;
+        outConf.rxTargetSpeed = 0;
+        outConf.duration = 30;
+        outConf.phaseDuration = 5;
+        outConf.soakDuration = 30;
+        outConf.soakCap = 10;
+        outConf.maxConnDrops = 0;
+        outConf.retries = 3;
         
         // Load server ips
         std::vector<std::string> serverIps = openFile("config/serverIps.conf");
@@ -40,6 +53,16 @@ namespace ServerConfigurationLoader {
             } else if(currLine.find("duration:") != -1){
                 currLine.erase(0, 9);
                 outConf.duration = std::stoi(currLine);
+            } else if(currLine.find("phaseDuration:") != std::string::npos){
+                outConf.phaseDuration = std::stoi(currLine.substr(currLine.find(":") + 1));
+            } else if(currLine.find("soakDuration:") != std::string::npos){
+                outConf.soakDuration = std::stoi(currLine.substr(currLine.find(":") + 1));
+            } else if(currLine.find("soakCap:") != std::string::npos){
+                outConf.soakCap = std::stoi(currLine.substr(currLine.find(":") + 1));
+            } else if(currLine.find("maxConnDrops:") != std::string::npos){
+                outConf.maxConnDrops = std::stoi(currLine.substr(currLine.find(":") + 1));
+            } else if(currLine.find("retries:") != std::string::npos){
+                outConf.retries = std::stoi(currLine.substr(currLine.find(":") + 1));
             }
         }
 

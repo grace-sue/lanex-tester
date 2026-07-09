@@ -10,6 +10,7 @@ namespace PingExecutor {
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
         if (!pipe) {
             std::cout << "popen() failed!";
+            return false;
         }
         // Read line by line command output
         while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
@@ -17,7 +18,7 @@ namespace PingExecutor {
             
             // Parse final line to get the result
             if(currLine.find("1 packets transmitted") != -1) {
-                if(currLine.find("100\% packet loss") != -1) {
+                if(currLine.find("100% packet loss") != -1 || currLine.find("0 received") != -1) {
                     return false; // packet was lost
                 } else {
                     return true; // packet was received
@@ -25,12 +26,16 @@ namespace PingExecutor {
             }
         }
 
-        return true;
+        return false;
     }
 
     // -1 all OK!
     // all other values: pair that had a problem
     int pingAll(int numOfPairs, std::vector<std::string> *ips) {
+        if(ips->size() < numOfPairs) {
+            return ips->size();
+        }
+
         for(int i = 0; i < numOfPairs; i++) {
             if(!pingDevice((*ips)[i])) {
                 return i; // Return the number of the pair that's not working

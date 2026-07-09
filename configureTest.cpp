@@ -45,7 +45,7 @@ namespace ConfigureTest {
                     showStep(stepN - 1, tc, "");
                 } else {
                     // Chech for valid configuration
-                    if(userInput.find("HE-") == -1 || !isdigit(userInput.c_str()[3]) || !isdigit(userInput.c_str()[4])) {
+                    if(userInput.size() < 5 || userInput.find("HE-") == -1 || !isdigit(userInput.c_str()[3]) || !isdigit(userInput.c_str()[4])) {
                         // Invalid configuration number
                         showStep(stepN, tc, "The entered configuration number is invalid");
                         
@@ -248,9 +248,9 @@ namespace ConfigureTest {
                 title += tc->operatorInitials;
                 msg = "Do you confirm that the following dip switches are set?\n";
                 msg += "        1   2  3   4\n";
-                msg += "HEAD:  off-ON-off-off\n\n";
+                msg += "HEAD:  off-off-off-ON\n\n";
                 msg += "        1   2  3   4\n";
-                msg += "FIELD: ON-off-off-off";
+                msg += "FIELD: ON-off-off-ON\n";
 
                 InterfaceUtils::createNewPage(title, msg, "(y)?");
                 InterfaceUtils::getStringFromCin(userInput);

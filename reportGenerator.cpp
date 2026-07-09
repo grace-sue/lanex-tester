@@ -1,11 +1,56 @@
 #include "reportGenerator.h"
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <cerrno>
 
 namespace ReportGenerator {
+
+    bool ensureDirectory(std::string path) {
+        if(path.empty()) {
+            return true;
+        }
+
+        if(mkdir(path.c_str(), 0755) == 0 || errno == EEXIST) {
+            return true;
+        }
+
+        return false;
+    }
+
+    bool ensureReportDirectories() {
+        return ensureDirectory("reports") && ensureDirectory("reports/eng");
+    }
+
+    std::string sanitizeFileName(std::string fileName) {
+        for(int i = 0; i < fileName.size(); i++) {
+            char currChar = fileName[i];
+            if(currChar == '/' || currChar == '\\' || currChar == ':' ||
+                currChar == '*' || currChar == '?' || currChar == '"' ||
+                currChar == '<' || currChar == '>' || currChar == '|' ||
+                currChar == '\r' || currChar == '\n') {
+                fileName[i] = '_';
+            }
+        }
+
+        return fileName;
+    }
     
 
     bool saveFile(std::string fileContent, std::string fileName) {
+        if(!ensureReportDirectories()) {
+            return false;
+        }
+
         std::ofstream file;
         std::string outLocation = "reports/";
+        std::string directoryPrefix;
+        size_t lastSlash = fileName.find_last_of("/");
+        if(lastSlash != std::string::npos) {
+            directoryPrefix = fileName.substr(0, lastSlash + 1);
+            fileName = fileName.substr(lastSlash + 1);
+        }
+
+        fileName = directoryPrefix + sanitizeFileName(fileName);
         outLocation += fileName;
         outLocation += ".txt";
         file.open(outLocation);
@@ -18,6 +63,10 @@ namespace ReportGenerator {
     }
 
     bool appendToAllReports(std::string fileContent) {
+        if(!ensureReportDirectories()) {
+            return false;
+        }
+
         std::string outCnt = "\n---------------------------------------\n";
         outCnt += fileContent;
         std::ofstream file("reports/allReports.txt", std::ios_base::app);

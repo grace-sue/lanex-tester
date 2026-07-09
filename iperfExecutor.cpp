@@ -34,6 +34,7 @@ namespace IperfExecutor {
 
     IperfMessage parseIperfBuffer(std::array<char, 128> *buffer) {
         IperfMessage outMsg;
+        outMsg.type = IPERF_ERROR;
         std::string cmdStdoutLine = buffer->data();
 
         // Stats msg flag
@@ -60,28 +61,32 @@ namespace IperfExecutor {
             int nextDelimiter = cmdStdoutLine.find("  ");
             outMsg.interval = cmdStdoutLine.substr(0, nextDelimiter); 
 
-            // Transfer
-            nextDelimiter = cmdStdoutLine.find("sec") + 3;
-            cmdStdoutLine.erase(0, nextDelimiter);
-            cmdStdoutLine = ltrim(cmdStdoutLine);
-            nextDelimiter = cmdStdoutLine.find(" ");
-            outMsg.transfer = std::stof(cmdStdoutLine.substr(0, nextDelimiter));
+            try {
+                // Transfer
+                nextDelimiter = cmdStdoutLine.find("sec") + 3;
+                cmdStdoutLine.erase(0, nextDelimiter);
+                cmdStdoutLine = ltrim(cmdStdoutLine);
+                nextDelimiter = cmdStdoutLine.find(" ");
+                outMsg.transfer = std::stof(cmdStdoutLine.substr(0, nextDelimiter));
 
-            // Transfer unit
-            cmdStdoutLine.erase(0, nextDelimiter + 1);
-            nextDelimiter = cmdStdoutLine.find(" ");
-            outMsg.transferUnit = cmdStdoutLine.substr(0, nextDelimiter);
-            
-            // Bitrate
-            cmdStdoutLine.erase(0, nextDelimiter);
-            cmdStdoutLine = ltrim(cmdStdoutLine);
-            nextDelimiter = cmdStdoutLine.find(" ");
-            outMsg.bitrate = std::stof(cmdStdoutLine.substr(0, nextDelimiter));
-            
-            // Bitrate unit
-            cmdStdoutLine.erase(0, nextDelimiter + 1);
-            nextDelimiter = cmdStdoutLine.find(" ");
-            outMsg.bitrateUnit = cmdStdoutLine.substr(0, nextDelimiter);
+                // Transfer unit
+                cmdStdoutLine.erase(0, nextDelimiter + 1);
+                nextDelimiter = cmdStdoutLine.find(" ");
+                outMsg.transferUnit = cmdStdoutLine.substr(0, nextDelimiter);
+                
+                // Bitrate
+                cmdStdoutLine.erase(0, nextDelimiter);
+                cmdStdoutLine = ltrim(cmdStdoutLine);
+                nextDelimiter = cmdStdoutLine.find(" ");
+                outMsg.bitrate = std::stof(cmdStdoutLine.substr(0, nextDelimiter));
+                
+                // Bitrate unit
+                cmdStdoutLine.erase(0, nextDelimiter + 1);
+                nextDelimiter = cmdStdoutLine.find(" ");
+                outMsg.bitrateUnit = cmdStdoutLine.substr(0, nextDelimiter);
+            } catch (...) {
+                outMsg.type = IPERF_ERROR;
+            }
 
         } else if(checkFirstCharacters(buffer, "Connecting to host") || 
             checkFirstCharacters(buffer, "[ ID]") ||
@@ -105,26 +110,29 @@ namespace IperfExecutor {
         std::string serverAddress, int serverPort, bool isReversed) {
         
         std::string cmd;
-        cmd += "ssh ";
+        cmd += "ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR ";
         cmd += "ubnt@";
         cmd += remoteAddress;
-        cmd += " -o LogLevel=QUIET -tt iperf3 --forceflush -c ";
+        cmd += " iperf3 -c ";
         cmd += serverAddress;
         cmd += " --port ";
         cmd += std::to_string(serverPort);
         cmd += " -t ";
         cmd += std::to_string(duration);
-        // cmd += " --connect-timeout 1000";
         // cmd += " -b 5m";
 
         if(isReversed) {
             cmd += " -R";
         }
+        cmd += " 2>&1";
 
         std::array<char, 128> buffer;
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
         if (!pipe) {
             std::cout << "popen() failed!";
+            td->averageRxRate[clientId] = -2;
+            td->averageTxRate[clientId] = -2;
+            return;
         }
 
         td->testLogs[clientId] += "---\n";
@@ -152,23 +160,41 @@ namespace IperfExecutor {
                 td->averageTxRate[clientId] = -2;
             }
         }
+
+        if(isReversed && td->averageRxRate[clientId] == -1) {
+            td->averageRxRate[clientId] = -2;
+        } else if(!isReversed && td->averageTxRate[clientId] == -1) {
+            td->averageTxRate[clientId] = -2;
+        }
     }
 
-    void startLocalIperf3Server(int serverPort) {
+    void startLocalIperf3Server(int serverPort, int timeoutSeconds) {
         std::string cmd;
-        cmd += "iperf3 -s --one-off --port ";
+        cmd += "timeout ";
+        cmd += std::to_string(timeoutSeconds);
+        cmd += " iperf3 -s --one-off --port ";
         cmd += std::to_string(serverPort);
+        cmd += " 2>&1";
 
         std::array<char, 128> buffer;
         std::string result;
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
         if (!pipe) {
             std::cout << "popen() failed!";
+            return;
         }
         while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
             result += buffer.data();
             IperfMessage msg = parseIperfBuffer(&buffer);
         }
+    }
+
+    void stopLocalIperf3Server(int serverPort) {
+        std::string cmd;
+        cmd += "pkill -f \"iperf3 -s --one-off --port ";
+        cmd += std::to_string(serverPort);
+        cmd += "\"";
+        system(cmd.c_str());
     }
 
 }

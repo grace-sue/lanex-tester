@@ -1,38 +1,45 @@
 #include "test.h"
 #include <unistd.h>
 #include <thread>
+#include <vector>
 
 
 namespace LANEXTest {
     int startTestRound(testData *testData, ConfigureTest::testConfiguration *tc, 
         ServerConfigurationLoader::ServerConfiguration *serverConf, bool flipped) {
         int numOfTestPairs = tc->numOfPairs;
+        if(serverConf->clientIps.size() < numOfTestPairs || serverConf->serverIps.size() < numOfTestPairs) {
+            return 1;
+        }
 
         // Start servers
         int portStart = 5201;
-        std::thread serverThreads[numOfTestPairs];
+        int processTimeoutSeconds = serverConf->duration + 15;
+        std::vector<std::thread> serverThreads;
+        serverThreads.reserve(numOfTestPairs);
         for(int i = 0; i < numOfTestPairs; i++) {
-            serverThreads[i] = std::thread(IperfExecutor::startLocalIperf3Server, portStart + i);
+            serverThreads.push_back(std::thread(IperfExecutor::startLocalIperf3Server, portStart + i, processTimeoutSeconds));
         }
 
         // Start clients
-        std::thread clientThreads[numOfTestPairs];
+        std::vector<std::thread> clientThreads;
+        clientThreads.reserve(numOfTestPairs);
         for(int i = 0; i < numOfTestPairs; i++) {
             if(i > 3) { // If more than 3 tests are running, flip its direction
                 if(flipped) {
-                    clientThreads[i] = std::thread(IperfExecutor::startRemoteIperf3Client, serverConf->duration, testData,
-                                            i, (*serverConf).clientIps[i], (*serverConf).serverIps[i], portStart + i, true);
+                    clientThreads.push_back(std::thread(IperfExecutor::startRemoteIperf3Client, serverConf->duration, testData,
+                                            i, (*serverConf).clientIps[i], (*serverConf).serverIps[i], portStart + i, true));
                 } else {
-                    clientThreads[i] = std::thread(IperfExecutor::startRemoteIperf3Client, serverConf->duration, testData,
-                                            i, (*serverConf).clientIps[i], (*serverConf).serverIps[i], portStart + i, false);
+                    clientThreads.push_back(std::thread(IperfExecutor::startRemoteIperf3Client, serverConf->duration, testData,
+                                            i, (*serverConf).clientIps[i], (*serverConf).serverIps[i], portStart + i, false));
                 }
             } else {
                 if(flipped) {
-                    clientThreads[i] = std::thread(IperfExecutor::startRemoteIperf3Client, serverConf->duration, testData,
-                                            i, (*serverConf).clientIps[i], (*serverConf).serverIps[i], portStart + i, false);
+                    clientThreads.push_back(std::thread(IperfExecutor::startRemoteIperf3Client, serverConf->duration, testData,
+                                            i, (*serverConf).clientIps[i], (*serverConf).serverIps[i], portStart + i, false));
                 } else {
-                    clientThreads[i] = std::thread(IperfExecutor::startRemoteIperf3Client, serverConf->duration, testData,
-                                            i, (*serverConf).clientIps[i], (*serverConf).serverIps[i], portStart + i, true);
+                    clientThreads.push_back(std::thread(IperfExecutor::startRemoteIperf3Client, serverConf->duration, testData,
+                                            i, (*serverConf).clientIps[i], (*serverConf).serverIps[i], portStart + i, true));
                 }
             }
             
@@ -76,6 +83,17 @@ namespace LANEXTest {
                     break; // All threads have ended or error, stop
                 }
             }
+
+            if(timeRemaining < -15) {
+                for(int i = 0; i < numOfTestPairs; i++) {
+                    if(testData->averageRxRate[i] == -1 && testData->averageTxRate[i] == -1) {
+                        testData->averageRxRate[i] = -2;
+                        testData->averageTxRate[i] = -2;
+                        errorWhileTesting = i;
+                    }
+                }
+                break;
+            }
             
             usleep(1 * 1000000); // Wait 1 second
             
@@ -92,16 +110,22 @@ namespace LANEXTest {
 
         }
 
+        if(errorWhileTesting != -1) {
+            InterfaceUtils::updateProgress("Error detected; stopping iperf");
+            for(int i = 0; i < numOfTestPairs; i++) {
+                IperfExecutor::stopLocalIperf3Server(portStart + i);
+            }
+        }
+
         // Wait for servers and clients
         for(int i = 0; i < numOfTestPairs; i++) {
-            // TODO: Kill threads if there's an error
-            serverThreads[i].join();
             clientThreads[i].join();
+            serverThreads[i].join();
         } 
 
         // Check for errors while testing
         if(errorWhileTesting != -1) {
-            return errorWhileTesting;
+            return errorWhileTesting + 1;
         }
 
         return 0;

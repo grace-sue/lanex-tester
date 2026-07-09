@@ -1,0 +1,65 @@
+#!/usr/bin/expect -f
+
+set timeout -1
+
+proc env_or_default {name default_value} {
+    if {[info exists ::env($name)] && $::env($name) ne ""} {
+        return $::env($name)
+    }
+
+    return $default_value
+}
+
+set operator_initials [env_or_default "LANEX_OPERATOR" "GS"]
+set pair1 [env_or_default "LANEX_PAIR1" "1234567-7654321"]
+set pair2 [env_or_default "LANEX_PAIR2" "2234567-7654322"]
+set pair3 [env_or_default "LANEX_PAIR3" "3234567-7654323"]
+set switch1 [env_or_default "LANEX_SWITCH1" "123456"]
+
+spawn ./LAN-EX-Tester
+
+expect "input:"
+send "$operator_initials\r"
+
+expect "input:"
+send "HE-31\r"
+
+expect "input:"
+send "$pair1\r"
+
+expect "input:"
+send "$pair2\r"
+
+expect "input:"
+send "$pair3\r"
+
+expect "input:"
+send "y\r"
+
+expect "input:"
+send "$switch1\r"
+
+expect "input:"
+send "y\r"
+
+expect "input:"
+send "y\r"
+
+expect "input:"
+send "y\r"
+
+expect {
+    "Press any key to save the report" {
+        send "\r"
+        exp_continue
+    }
+    "Do you want to restart the test?" {
+        send "n\r"
+        exp_continue
+    }
+    "Press any key to exit" {
+        send "\r"
+        exp_continue
+    }
+    eof
+}
