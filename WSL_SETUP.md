@@ -66,12 +66,62 @@ wsl --version
 wsl --status
 ```
 
-## Enable WSL Mirrored Networking
+## Network Goal
 
-On Windows, create or edit this file:
+The Windows PC uses one physical Ethernet NIC connected to a switch.
+
+WSL uses mirrored networking and accesses the same physical network through interface `eth1`.
+
+The PC/WSL side uses these IP addresses:
 
 ```text
-C:\Users\<your-user>\.wslconfig
+192.168.1.20/24
+192.168.2.20/24
+192.168.3.20/24
+192.168.4.20/24
+192.168.5.20/24
+192.168.6.20/24
+192.168.7.20/24
+192.168.8.20/24
+```
+
+The router ports use:
+
+```text
+192.168.1.1/24
+192.168.2.1/24
+192.168.3.1/24
+192.168.4.1/24
+192.168.5.1/24
+192.168.6.1/24
+192.168.7.1/24
+192.168.8.1/24
+```
+
+The topology is:
+
+```text
+WSL application
+      |
+WSL eth1
+      |
+Windows Ethernet NIC
+      |
+    Switch
+      |
+Router ports 1–8
+```
+
+No VLAN configuration is required. All switch ports can stay in the same untagged VLAN.
+
+---
+
+## Step 1: Enable WSL Mirrored Networking
+
+Open PowerShell and edit the WSL configuration file:
+
+```powershell
+notepad $env:USERPROFILE\.wslconfig
 ```
 
 Add:
@@ -79,54 +129,371 @@ Add:
 ```ini
 [wsl2]
 networkingMode=mirrored
+dnsTunneling=true
 firewall=true
-
-[experimental]
-hostAddressLoopback=true
+autoProxy=true
 ```
 
-Restart WSL from PowerShell:
+Save the file.
+
+Restart WSL:
 
 ```powershell
 wsl --shutdown
 ```
 
-Open WSL again after shutdown completes.
+Then open WSL again.
 
-Microsoft documentation:
+---
 
-- <https://learn.microsoft.com/en-us/windows/wsl/wsl-config>
-- <https://learn.microsoft.com/en-us/windows/wsl/networking>
+## Step 2: Confirm the Mirrored Interface
 
-## Add Tester IPs To Windows
+Inside WSL, run:
 
-Run PowerShell as Administrator.
-
-Find the Ethernet adapter name:
-
-```powershell
-Get-NetAdapter
+```bash
+ip -br addr
 ```
 
-If the adapter is named `Ethernet`, add the tester IPs:
+The physical mirrored Ethernet interface should appear as:
 
-```powershell
-New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.1.20 -PrefixLength 24
-New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.2.20 -PrefixLength 24
-New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.3.20 -PrefixLength 24
-New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.4.20 -PrefixLength 24
-New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.5.20 -PrefixLength 24
-New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.6.20 -PrefixLength 24
-New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.7.20 -PrefixLength 24
-New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.8.20 -PrefixLength 24
+```text
+eth1
 ```
 
-If your adapter has a different name, replace `"Ethernet"` with the name shown by `Get-NetAdapter`.
+Check its details:
 
-Verify:
+```bash
+ip -4 addr show dev eth1
+```
+
+---
+
+## Step 3: Add the Secondary IP Addresses in WSL
+
+Run:
+
+```bash
+for i in {1..8}; do
+    sudo ip addr add "192.168.$i.20/24" dev eth1
+done
+```
+
+This adds the following IP addresses to `eth1`:
+
+```text
+192.168.1.20
+192.168.2.20
+192.168.3.20
+192.168.4.20
+192.168.5.20
+192.168.6.20
+192.168.7.20
+192.168.8.20
+```
+
+If an address already exists, Linux may show:
+
+```text
+RTNETLINK answers: File exists
+```
+
+This only means that the address is already configured.
+
+Verify the addresses:
+
+```bash
+ip -4 addr show dev eth1
+```
+
+---
+
+## Step 4: Add Routes with the Correct Source IP
+
+WSL may not automatically select the matching source IP for each subnet.
+
+Add one route for each subnet and explicitly specify the preferred source IP:
+
+```bash
+for i in {1..8}; do
+    sudo ip route replace \
+        "192.168.$i.0/24" \
+        dev eth1 \
+        src "192.168.$i.20"
+done
+```
+
+This creates routes such as:
+
+```text
+192.168.1.0/24 dev eth1 src 192.168.1.20
+192.168.2.0/24 dev eth1 src 192.168.2.20
+192.168.3.0/24 dev eth1 src 192.168.3.20
+```
+
+The `src` value tells Linux which local IP address to use when sending traffic to that subnet.
+
+---
+
+## Step 5: Verify Route Selection
+
+Run:
+
+```bash
+for i in {1..8}; do
+    ip route get "192.168.$i.1"
+done
+```
+
+The output should look similar to:
+
+```text
+192.168.1.1 dev eth1 src 192.168.1.20
+192.168.2.1 dev eth1 src 192.168.2.20
+192.168.3.1 dev eth1 src 192.168.3.20
+192.168.4.1 dev eth1 src 192.168.4.20
+192.168.5.1 dev eth1 src 192.168.5.20
+192.168.6.1 dev eth1 src 192.168.6.20
+192.168.7.1 dev eth1 src 192.168.7.20
+192.168.8.1 dev eth1 src 192.168.8.20
+```
+
+The important part is that every destination uses the matching `src` address.
+
+---
+
+## Step 6: Test Every Router Port
+
+Run:
+
+```bash
+for i in {1..8}; do
+    echo "Testing 192.168.$i.20 -> 192.168.$i.1"
+
+    ping \
+        -I "192.168.$i.20" \
+        -c 2 \
+        -W 1 \
+        "192.168.$i.1"
+done
+```
+
+For example, when `i=3`, the command becomes:
+
+```bash
+ping -I 192.168.3.20 -c 2 -W 1 192.168.3.1
+```
+
+The options mean:
+
+```text
+-I 192.168.3.20   Use this local source IP
+-c 2              Send two ping packets
+-W 1              Wait up to one second for each reply
+192.168.3.1       Destination router IP
+```
+
+---
+
+## Step 7: Test SSH Access
+
+If the LANEX Tester uses SSH to run commands on the router, test every router IP:
+
+```bash
+for i in {1..8}; do
+    echo "Testing SSH to 192.168.$i.1"
+
+    ssh \
+        -o ConnectTimeout=3 \
+        "ubnt@192.168.$i.1" \
+        "echo Connected to 192.168.$i.1"
+done
+```
+
+Replace `ubnt` with the correct router username.
+
+---
+
+## Step 8: Allow iperf3 Through Windows Firewall
+
+Open PowerShell as Administrator and allow TCP ports `5201` through `5208`:
 
 ```powershell
-Get-NetIPAddress -InterfaceAlias "Ethernet" -AddressFamily IPv4
+New-NetFirewallRule `
+    -DisplayName "LANEX Tester iperf3 TCP" `
+    -Direction Inbound `
+    -Protocol TCP `
+    -LocalPort 5201-5208 `
+    -Action Allow `
+    -Profile Any
+```
+
+If UDP testing is also required:
+
+```powershell
+New-NetFirewallRule `
+    -DisplayName "LANEX Tester iperf3 UDP" `
+    -Direction Inbound `
+    -Protocol UDP `
+    -LocalPort 5201-5208 `
+    -Action Allow `
+    -Profile Any
+```
+
+---
+
+## Step 9: Start iperf3 Servers Manually
+
+Start eight `iperf3` servers inside WSL:
+
+```bash
+for i in {1..8}; do
+    port=$((5200 + i))
+
+    iperf3 \
+        -s \
+        -1 \
+        -p "$port" \
+        > "/tmp/iperf-server-$i.log" 2>&1 &
+done
+```
+
+Check that they are listening:
+
+```bash
+ss -lntp | grep iperf3
+```
+
+You should see ports:
+
+```text
+5201
+5202
+5203
+5204
+5205
+5206
+5207
+5208
+```
+
+---
+
+## Step 10: Test from the Router
+
+The router should connect to the matching WSL IP and port.
+
+Examples:
+
+```bash
+iperf3 -c 192.168.1.20 -p 5201
+iperf3 -c 192.168.2.20 -p 5202
+iperf3 -c 192.168.3.20 -p 5203
+```
+
+The complete mapping is:
+
+```text
+Router 192.168.1.1 -> WSL 192.168.1.20:5201
+Router 192.168.2.1 -> WSL 192.168.2.20:5202
+Router 192.168.3.1 -> WSL 192.168.3.20:5203
+Router 192.168.4.1 -> WSL 192.168.4.20:5204
+Router 192.168.5.1 -> WSL 192.168.5.20:5205
+Router 192.168.6.1 -> WSL 192.168.6.20:5206
+Router 192.168.7.1 -> WSL 192.168.7.20:5207
+Router 192.168.8.1 -> WSL 192.168.8.20:5208
+```
+
+---
+
+## Step 11: Configure LANEX Tester
+
+The server IP configuration should contain:
+
+```text
+192.168.1.20
+192.168.2.20
+192.168.3.20
+192.168.4.20
+192.168.5.20
+192.168.6.20
+192.168.7.20
+192.168.8.20
+```
+
+The router/client IP configuration should contain:
+
+```text
+192.168.1.1
+192.168.2.1
+192.168.3.1
+192.168.4.1
+192.168.5.1
+192.168.6.1
+192.168.7.1
+192.168.8.1
+```
+
+---
+
+## Optional: Create a Reusable Setup Script
+
+Create the script:
+
+```bash
+nano ~/setup-lanex-network.sh
+```
+
+Add:
+
+```bash
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+INTERFACE="${1:-eth1}"
+
+for i in {1..8}; do
+    LOCAL_IP="192.168.${i}.20"
+    NETWORK="192.168.${i}.0/24"
+
+    if ! ip -4 addr show dev "$INTERFACE" | grep -qw "$LOCAL_IP"; then
+        sudo ip addr add "${LOCAL_IP}/24" dev "$INTERFACE"
+    fi
+
+    sudo ip route replace \
+        "$NETWORK" \
+        dev "$INTERFACE" \
+        src "$LOCAL_IP"
+done
+
+echo
+echo "Configured routes:"
+
+for i in {1..8}; do
+    ip route get "192.168.${i}.1"
+done
+```
+
+Make it executable:
+
+```bash
+chmod +x ~/setup-lanex-network.sh
+```
+
+Run it:
+
+```bash
+~/setup-lanex-network.sh
+```
+
+Or explicitly specify the interface:
+
+```bash
+~/setup-lanex-network.sh eth1
+```
+
+WSL network settings may be reset after `wsl --shutdown` or a Windows restart, so this script may need to be run again after WSL starts.
+
 ```
 
 ## Allow Inbound Traffic To WSL
@@ -222,6 +589,15 @@ Host 192.168.*.1
     HostKeyAlgorithms +ssh-rsa
 ```
 
+If SSH reports `Bad configuration option: pubkeyacceptedalgorithms`, your WSL OpenSSH client uses the older option name. Replace `PubkeyAcceptedAlgorithms` with `PubkeyAcceptedKeyTypes`:
+
+```sshconfig
+Host 192.168.*.1
+    User ubnt
+    PubkeyAcceptedKeyTypes +ssh-rsa
+    HostKeyAlgorithms +ssh-rsa
+```
+
 Then:
 
 ```bash
@@ -271,35 +647,3 @@ make build
 mkdir -p reports/eng
 make run
 ```
-
-## VLAN Notes
-
-Mirrored networking mirrors Windows networking into WSL. It does not create VLAN interfaces by itself.
-
-If the bench uses real 802.1Q tagged VLANs, Windows must expose those VLAN interfaces first. Common options are:
-
-- Configure VLAN interfaces using the Windows NIC driver, then assign `192.168.x.20` addresses to those VLAN interfaces.
-- Configure the switch/router ports as access/untagged ports so Windows only sees normal Ethernet networks.
-- Use native Linux or a bridged Linux VM if VLAN tagging must be controlled from Linux.
-
-For the simplest LAN-EX tester setup, avoid VLAN tagging on the WSL side. Let Windows own the `192.168.x.20` addresses and let WSL mirrored networking expose them to the Linux environment.
-
-## Troubleshooting
-
-If ping works but the test hangs on `tmp`, check SSH first:
-
-```bash
-ssh -o BatchMode=yes ubnt@192.168.1.1 echo OK
-```
-
-If SSH works but iperf does not update TX/RX, check inbound firewall access to ports `5201-5208`.
-
-If WSL shows only `172.x.x.x` addresses, mirrored networking is probably not active. Recheck `.wslconfig`, run `wsl --shutdown`, and restart WSL.
-
-If `New-NetIPAddress` says the address already exists, verify with:
-
-```powershell
-Get-NetIPAddress -AddressFamily IPv4 | Where-Object IPAddress -Like "192.168.*"
-```
-
-If the EdgeRouter cannot reach `192.168.x.20`, make sure the IP address was added to the correct Windows Ethernet adapter and that the physical cabling/switching matches the `192.168.x.1` network.
