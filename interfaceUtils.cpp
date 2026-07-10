@@ -65,7 +65,7 @@ namespace InterfaceUtils {
             line1 += std::to_string(i + 1);
             line1 += ":\t\t\t\tTX\t\tRX\n";
             std::string line2 = tc->serialNumberPairs[i];
-            line2 += "\t\t\ttmp\t\ttmp\n";
+            line2 += "\t\t\t-\t\t-\n";
 
             printw(line1.c_str());
             printw(line2.c_str());

@@ -156,47 +156,70 @@ namespace LANEXTest {
         }
     }
 
-    // Phase B: capped soak, all pairs in parallel. Judged only on connection drops.
-    // Uses a plain capped forward stream (the EdgeRouter's iperf3 has no --bidir);
-    // bidirectional coverage is provided by Phase A's TX+RX passes. TX shows the live
-    // ~cap rate; RX is not exercised in this phase.
-    static void phaseB(testData &td, ServerConfigurationLoader::ServerConfiguration *sc,
-                       ConfigureTest::testConfiguration *tc, PairCycle *cyc,
-                       std::atomic<bool> &stop, RunSummary &sum) {
+    // Runs every pair in parallel in ONE direction for `dur` seconds, capped, recording
+    // any connection drops. Used for each half of Phase B. The live rate lands in the TX
+    // column for the forward half and the RX column for the reverse half.
+    static void soakHalf(testData &td, ServerConfigurationLoader::ServerConfiguration *sc,
+                         ConfigureTest::testConfiguration *tc, PairCycle *cyc,
+                         std::atomic<bool> &stop, RunSummary &sum,
+                         bool reversed, int dur, int cap, const std::string &dirLabel) {
         int n = tc->numOfPairs;
-        int dur = sc->soakDuration;
-        int cap = sc->soakCap;
-
         for(int pair = 0; pair < n; pair++) {
-            InterfaceUtils::updateTxOfPair(pair, "soak");
-            InterfaceUtils::updateRxOfPair(pair, "-");
+            // Clear the live-rate variables synchronously (before launching), so the pump
+            // can't paint a stale value (e.g. Phase A's RX) into the column this half
+            // doesn't measure.
+            td.currentTxRate[pair] = -1;
+            td.currentRxRate[pair] = -1;
+            if(reversed) InterfaceUtils::updateRxOfPair(pair, "soak");
+            else         InterfaceUtils::updateTxOfPair(pair, "soak");
         }
 
         std::vector<std::future<IperfExecutor::IperfResult>> futs;
         for(int pair = 0; pair < n; pair++) {
             int port = PORT_START + pair;
-            futs.push_back(std::async(std::launch::async, [&td, sc, pair, port, dur, cap, &stop]() {
-                return measureWithRetry(td, sc, pair, port, dur, false, cap, false, sc->retries, stop);
+            futs.push_back(std::async(std::launch::async, [&td, sc, pair, port, dur, cap, reversed, &stop]() {
+                return measureWithRetry(td, sc, pair, port, dur, reversed, cap, false, sc->retries, stop);
             }));
         }
 
         std::string label = "Cycle " + std::to_string(sum.cyclesCompleted + 1) +
-            " | Phase B | soak all " + std::to_string(n) + " pairs @" + std::to_string(cap) + "m";
-        pumpFutures(futs, td, n, stop, label, dur, true); // TX shows the live capped rate
+            " | Phase B " + dirLabel + " | soak all " + std::to_string(n) + " pairs @" + std::to_string(cap) + "m";
+        pumpFutures(futs, td, n, stop, label, dur, true);
 
         for(int pair = 0; pair < n; pair++) {
             IperfExecutor::IperfResult res = futs[pair].get();
             if(stop) continue; // discard interrupted cycle
+            std::string cell = "OK";
             if(res == IperfExecutor::IPERF_RESULT_CONNECTION_DROP) {
-                recordDrop(sum, cyc, pair, "Phase B");
-                InterfaceUtils::updateTxOfPair(pair, "DROP"); InterfaceUtils::updateRxOfPair(pair, "DROP");
+                recordDrop(sum, cyc, pair, "Phase B " + dirLabel);
+                cell = "DROP";
             } else if(res == IperfExecutor::IPERF_RESULT_SETUP_ERROR) {
-                recordError(sum, cyc, pair, "Phase B");
-                InterfaceUtils::updateTxOfPair(pair, "ERR"); InterfaceUtils::updateRxOfPair(pair, "ERR");
-            } else {
-                InterfaceUtils::updateTxOfPair(pair, "OK"); InterfaceUtils::updateRxOfPair(pair, "-");
+                recordError(sum, cyc, pair, "Phase B " + dirLabel);
+                cell = "ERR";
             }
+            if(reversed) InterfaceUtils::updateRxOfPair(pair, cell);
+            else         InterfaceUtils::updateTxOfPair(pair, cell);
         }
+    }
+
+    // Phase B: capped soak of all pairs in parallel — forward (TX) half then reverse (RX)
+    // half, each soakDuration/2. Judged only on connection drops. The EdgeRouter's iperf3
+    // has no --bidir, so the two directions run one after another rather than at once.
+    static void phaseB(testData &td, ServerConfigurationLoader::ServerConfiguration *sc,
+                       ConfigureTest::testConfiguration *tc, PairCycle *cyc,
+                       std::atomic<bool> &stop, RunSummary &sum) {
+        int half = sc->soakDuration / 2;
+        if(half < 1) half = 1;
+        int cap = sc->soakCap;
+
+        for(int pair = 0; pair < tc->numOfPairs; pair++) {
+            InterfaceUtils::updateTxOfPair(pair, "-");
+            InterfaceUtils::updateRxOfPair(pair, "-");
+        }
+
+        soakHalf(td, sc, tc, cyc, stop, sum, false, half, cap, "TX"); // client -> server
+        if(stop) return;
+        soakHalf(td, sc, tc, cyc, stop, sum, true, half, cap, "RX");  // server -> client (-R)
     }
 
     // Scores each pair independently for this cycle: throughput (Phase A) vs targets,

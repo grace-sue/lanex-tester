@@ -15,6 +15,7 @@ set pair1 [env_or_default "LANEX_PAIR1" "1234567-7654321"]
 set pair2 [env_or_default "LANEX_PAIR2" "2234567-7654322"]
 set pair3 [env_or_default "LANEX_PAIR3" "3234567-7654323"]
 set switch1 [env_or_default "LANEX_SWITCH1" "123456"]
+set stop_after_ms [env_or_default "LANEX_STOP_AFTER_MS" "5000"]
 
 spawn ./LAN-EX-Tester
 
@@ -49,17 +50,11 @@ expect "input:"
 send "y\r"
 
 expect {
-    "Press any key to save the report" {
-        send "\r"
-        exp_continue
+    "Test in progress" {
+        interact
     }
-    "Do you want to restart the test?" {
-        send "n\r"
-        exp_continue
-    }
-    "Press any key to exit" {
-        send "\r"
-        exp_continue
+    "Press any key to try again" {
+        interact
     }
     eof
 }
