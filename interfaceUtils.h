@@ -13,5 +13,7 @@ namespace InterfaceUtils {
     void updateTxOfPair(int pairN, std::string val);
     void updateRxOfPair(int pairN, std::string val);
     void updateProgress(std::string val);
+    void setNonBlockingInput(bool nonBlocking);
+    bool pollStopKey();   // true if 'q'/'Q' is waiting in the input buffer (non-blocking)
 }
 #endif

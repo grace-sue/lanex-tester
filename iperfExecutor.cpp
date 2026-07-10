@@ -1,5 +1,6 @@
 #include "iperfExecutor.h"
 #include <ncurses.h>
+#include <sstream>
 namespace IperfExecutor {
     // Helper functions
     const std::string WHITESPACE = " \n\r\t\f\v";
@@ -106,11 +107,32 @@ namespace IperfExecutor {
         return outMsg;
     }
 
-    void startRemoteIperf3Client(int duration, LANEXTest::testData *td, int clientId, std::string remoteAddress, 
-        std::string serverAddress, int serverPort, bool isReversed) {
-        
+    // Extracts the Mbps value from an iperf3 line like "... 9.24 Mbits/sec ...".
+    // Works for single-stream and bidir ([TX-C]/[RX-C]) lines. Returns -1 if none.
+    static float extractBitrate(const std::string &line) {
+        std::stringstream ss(line);
+        std::string tok, prev;
+        while(ss >> tok) {
+            if(tok.find("bits/sec") != std::string::npos) {
+                try {
+                    float v = std::stof(prev);
+                    if(tok[0] == 'G') v *= 1000.0f;
+                    else if(tok[0] == 'K') v /= 1000.0f;
+                    return v;
+                } catch(...) { return -1.0f; }
+            }
+            prev = tok;
+        }
+        return -1.0f;
+    }
+
+    IperfResult startRemoteIperf3Client(int duration, LANEXTest::testData *td, int clientId, std::string remoteAddress,
+        std::string serverAddress, int serverPort, bool isReversed, int bandwidthCap, bool bidir) {
+
         std::string cmd;
-        cmd += "ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR ";
+        // -n keeps ssh from reading the terminal's stdin, otherwise the ssh clients
+        // swallow the operator's 'q' keypress instead of it reaching the app.
+        cmd += "ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR -n ";
         cmd += "ubnt@";
         cmd += remoteAddress;
         cmd += " iperf3 -c ";
@@ -119,9 +141,14 @@ namespace IperfExecutor {
         cmd += std::to_string(serverPort);
         cmd += " -t ";
         cmd += std::to_string(duration);
-        // cmd += " -b 5m";
-
-        if(isReversed) {
+        if(bandwidthCap > 0) {           // Phase B caps each pair (e.g. -b 10M)
+            cmd += " -b ";
+            cmd += std::to_string(bandwidthCap);
+            cmd += "M";
+        }
+        if(bidir) {                      // Phase B sends both directions at once
+            cmd += " --bidir";
+        } else if(isReversed) {
             cmd += " -R";
         }
         cmd += " 2>&1";
@@ -129,43 +156,60 @@ namespace IperfExecutor {
         std::array<char, 128> buffer;
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
         if (!pipe) {
-            std::cout << "popen() failed!";
-            td->averageRxRate[clientId] = -2;
-            td->averageTxRate[clientId] = -2;
-            return;
+            // popen itself failed to launch the command — a setup error, not a link drop.
+            return IPERF_RESULT_SETUP_ERROR;
         }
 
         td->testLogs[clientId] += "---\n";
+        bool sawProgress = false;   // connection established and data actually flowed
+        bool completed = false;     // reached a clean finish ("iperf Done.")
+
         while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
             td->testLogs[clientId] += buffer.data();
+            std::string raw = buffer.data();
+            if(raw.find("iperf Done.") != std::string::npos) {
+                completed = true;
+            }
+
+            if(bidir) {
+                // Bidirectional interval lines are tagged with a role: [TX-C] / [RX-C].
+                bool isTx = raw.find("[TX-C]") != std::string::npos;
+                bool isRx = raw.find("[RX-C]") != std::string::npos;
+                if(isTx || isRx) {
+                    float rate = extractBitrate(raw);
+                    if(rate >= 0) {
+                        sawProgress = true;
+                        if(isTx) td->currentTxRate[clientId] = rate;
+                        if(isRx) td->currentRxRate[clientId] = rate;
+                    }
+                }
+                continue;
+            }
+
             IperfMessage msg = parseIperfBuffer(&buffer);
             // log progress
             if(msg.type == IPERF_PROGRESS_STATS) {
+                sawProgress = true;
                 if(isReversed) {
                     td->currentRxRate[clientId] = msg.bitrate;
                 } else {
                     td->currentTxRate[clientId] = msg.bitrate;
                 }
-            } else if(msg.type == IPERF_COMPLETED_SENDER_STATS && isReversed) {
-                td->averageRxRate[clientId] = msg.bitrate;
-            } else if(msg.type == IPERF_COMPLETED_RECEIVER_STATS && !isReversed) {
-                td->averageTxRate[clientId] = msg.bitrate;
-            } else if(msg.type == IPERF_ERROR) {
-                // std::cout << "HERE!";
-                // move(5,0);
-                // printw((std::string(buffer.data())).c_str());
-                // move(6,0);
-                // printw(std::to_string((std::string(buffer.data())).length()).c_str());
-                td->averageRxRate[clientId] = -2;
-                td->averageTxRate[clientId] = -2;
+            } else if(msg.type == IPERF_COMPLETED_SENDER_STATS) {
+                if(isReversed) td->averageRxRate[clientId] = msg.bitrate;
+            } else if(msg.type == IPERF_COMPLETED_RECEIVER_STATS) {
+                if(!isReversed) td->averageTxRate[clientId] = msg.bitrate;
             }
         }
 
-        if(isReversed && td->averageRxRate[clientId] == -1) {
-            td->averageRxRate[clientId] = -2;
-        } else if(!isReversed && td->averageTxRate[clientId] == -1) {
-            td->averageTxRate[clientId] = -2;
+        if(completed) {
+            return IPERF_RESULT_COMPLETED;
         }
+
+        // Did not finish cleanly. Distinguish a mid-stream connection drop (data flowed then
+        // died) from a failure to even start (never connected). The engine acts on this
+        // return value; the pair's rate slots are simply left unset.
+        return sawProgress ? IPERF_RESULT_CONNECTION_DROP : IPERF_RESULT_SETUP_ERROR;
     }
 
     void startLocalIperf3Server(int serverPort, int timeoutSeconds) {
@@ -195,6 +239,15 @@ namespace IperfExecutor {
         cmd += std::to_string(serverPort);
         cmd += "\"";
         system(cmd.c_str());
+    }
+
+    void stopAllIperf3() {
+        // Kill our local iperf3 servers and the local ssh processes running the remote
+        // clients, closing every pipe. Patterns are matched to OUR exact invocations
+        // (the one-off server and our specific ssh option string) to avoid killing
+        // unrelated processes that merely mention iperf3.
+        system("pkill -f 'iperf3 -s --one-off' 2>/dev/null");
+        system("pkill -f 'ssh -o BatchMode=yes -o ConnectTimeout=5' 2>/dev/null");
     }
 
 }

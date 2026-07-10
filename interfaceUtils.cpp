@@ -90,35 +90,57 @@ namespace InterfaceUtils {
     void updateTxOfPair(int pairN, std::string val) {
         //32
         move(3 + 3*pairN + 1, 32);
-        printw(val.c_str());
+        printw("            "); // clear the field so a shorter value can't leave stale chars
+        move(3 + 3*pairN + 1, 32);
+        printw("%s", val.c_str());
         moveCursorOutOfScreen();
         refresh();
-    } 
+    }
 
     void updateProgress(std::string val) {
         int maxRow, maxCol;
         getmaxyx(stdscr, maxRow, maxCol);
         move(maxRow -1, 10);
-        printw("                         "); // Clear space
+        for(int c = 10; c < maxCol; c++) { printw(" "); } // Clear to end of line
         move(maxRow -1, 10);
-        printw(val.c_str());
+        printw("%s", val.c_str());
         moveCursorOutOfScreen();
         refresh();
-    } 
+    }
 
     void updateRxOfPair(int pairN, std::string val) {
         //48
         move(3 + 3*pairN + 1, 48);
-        printw(val.c_str());
+        printw("            "); // clear the field so a shorter value can't leave stale chars
+        move(3 + 3*pairN + 1, 48);
+        printw("%s", val.c_str());
         moveCursorOutOfScreen();
         refresh();
-    } 
+    }
 
     void getStringFromCin(std::string &str) {
         char inBuff[1024];
         getstr(inBuff);
         str = inBuff;
     }    
+
+    // Switch getch() between blocking (menus) and non-blocking (live test loop).
+    void setNonBlockingInput(bool nonBlocking) {
+        nodelay(stdscr, nonBlocking ? TRUE : FALSE);
+    }
+
+    // Drains any pending input; returns true if 'q'/'Q' was seen. Requires non-blocking mode.
+    bool pollStopKey() {
+        bool stop = false;
+        int ch = getch();
+        while(ch != ERR) {
+            if(ch == 'q' || ch == 'Q') {
+                stop = true;
+            }
+            ch = getch();
+        }
+        return stop;
+    }
 
     void endScreen() {
         endwin();

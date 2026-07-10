@@ -39,9 +39,10 @@ cat > "$TMP/bin/ssh" <<'SSH'
 #!/bin/sh
 echo "$*" >> "$SSH_LOG"
 case "$FAKE_MODE" in
-  COMPLETED) printf 'Connecting to host\n[  5] connected to x\n[  5]   0.00-1.00   sec  100 MBytes   900 Mbits/sec\n[  5]   0.00-5.00   sec  500 MBytes   900 Mbits/sec   receiver\niperf Done.\n' ;;
-  DROP)      printf 'Connecting to host\n[  5] connected to x\n[  5]   0.00-1.00   sec  100 MBytes   900 Mbits/sec\n' ;;
-  SETUP)     printf 'iperf3: error - unable to connect to server: Connection refused\n' ;;
+  COMPLETED)  printf 'Connecting to host\n[  5] connected to x\n[  5]   0.00-1.00   sec  100 MBytes   900 Mbits/sec\n[  5]   0.00-5.00   sec  500 MBytes   900 Mbits/sec   receiver\niperf Done.\n' ;;
+  DROP)       printf 'Connecting to host\n[  5] connected to x\n[  5]   0.00-1.00   sec  100 MBytes   900 Mbits/sec\n' ;;
+  DROP_BIDIR) printf 'Connecting to host\n[  5][TX-C]   0.00-1.00   sec  1.10 MBytes  9.90 Mbits/sec\n[  7][RX-C]   0.00-1.00   sec  1.19 MBytes  9.80 Mbits/sec\n' ;;
+  SETUP)      printf 'iperf3: error - unable to connect to server: Connection refused\n' ;;
 esac
 SSH
 chmod +x "$TMP/bin/ssh"
@@ -50,14 +51,15 @@ export SSH_LOG="$TMP/ssh.log"
 
 echo
 echo "M2 — connection-drop detection"
-check "clean finish        -> COMPLETED"       "COMPLETED"       "$(FAKE_MODE=COMPLETED "$TMP/harness" iperf 10 1 0)"
-check "died mid-stream     -> CONNECTION_DROP" "CONNECTION_DROP" "$(FAKE_MODE=DROP      "$TMP/harness" iperf 10 1 0)"
-check "never connected     -> SETUP_ERROR"     "SETUP_ERROR"     "$(FAKE_MODE=SETUP     "$TMP/harness" iperf 10 1 0)"
+check "single: clean finish -> COMPLETED"       "COMPLETED"       "$(FAKE_MODE=COMPLETED  "$TMP/harness" iperf 0 0 0)"
+check "single: died         -> CONNECTION_DROP" "CONNECTION_DROP" "$(FAKE_MODE=DROP       "$TMP/harness" iperf 0 0 0)"
+check "never connected      -> SETUP_ERROR"     "SETUP_ERROR"     "$(FAKE_MODE=SETUP      "$TMP/harness" iperf 0 0 0)"
+check "bidir: died          -> CONNECTION_DROP" "CONNECTION_DROP" "$(FAKE_MODE=DROP_BIDIR "$TMP/harness" iperf 10 1 0)"
 
 echo
 echo "M2 — iperf3 command flags"
 : > "$SSH_LOG"; FAKE_MODE=COMPLETED "$TMP/harness" iperf 10 1 0 >/dev/null
-check "cap + bidir (no -R)" "iperf3 -c 10.0.0.2 --port 5201 -t 5 -b 10m --bidir" \
+check "cap + bidir (no -R)" "iperf3 -c 10.0.0.2 --port 5201 -t 5 -b 10M --bidir" \
     "$(grep -o 'iperf3 .*' "$SSH_LOG")"
 : > "$SSH_LOG"; FAKE_MODE=COMPLETED "$TMP/harness" iperf 0 0 1 >/dev/null
 check "reverse, uncapped"   "iperf3 -c 10.0.0.2 --port 5201 -t 5 -R" \

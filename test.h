@@ -7,9 +7,14 @@
 #include "serverConfigurationLoader.h"
 #include "pingExecutor.h"
 namespace LANEXTest {
-    
-    bool startTest(ConfigureTest::testConfiguration *tc, 
-                ServerConfigurationLoader::ServerConfiguration *serverConf,
-                testData &testData);
+
+    // Runs the continuous two-phase test loop until the operator presses 'q'.
+    // Fills `sum` with the accumulated per-pair results for the report.
+    void runContinuous(ConfigureTest::testConfiguration *tc,
+                       ServerConfigurationLoader::ServerConfiguration *serverConf,
+                       testData &td, RunSummary &sum);
+
+    // Final per-pair verdict: passed throughput every cycle AND stayed within the drop limit.
+    bool pairPassed(const RunSummary &sum, int pair, int maxConnDrops);
 };
 #endif
