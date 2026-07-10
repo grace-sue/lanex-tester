@@ -209,19 +209,27 @@ t=30s   wall clock hits → remaining pairs stop → Phase B done
 
 ---
 
-## 8. Terminal UI  *(Milestone 5)*
+## 8. Terminal UI  *(Milestone 5 — done)*
 
-**`interfaceUtils.cpp/.h`** — bring the live screen to the approved mockups
-(`docs/mockups/lanex-ui-mockups.html`):
+**`interfaceUtils.cpp/.h`** — brought the live screen to the approved mockups
+(`docs/mockups/lanex-ui-mockups.html`), adapted to the binary-drop model:
 
-- `createNewTestMonitorPage`: top status line (LIVE badge + `press Q` hint), meta line
-  (operator · config · cycle · elapsed), and **Drops + Status** columns (Drops = connection-drop count).
-- New updaters: `updateDrops`, `updateStatus`, `updateCycle`, `updateElapsed`, `setPhaseLabel`.
-- `drawBar(label, pct, subtext)` — block-char progress/countdown bar (Phase A countdown, Phase B
-  soak timer, ping progress).
-- `showError(pair, reason, attempt, retries)` — amber error panel.
-- `showSummary(RunSummary&)` — final PASS/FAIL result screen.
-- `bool pollStop()` — non-blocking `q` check for the update loops.
+- Color via ncurses `start_color` + `use_default_colors`: teal = running/active, green = done/pass,
+  amber = retry, red = fail, dim = waiting/muted (the "at-a-glance" cue from the mockups).
+- `beginTestMonitor(MonitorInfo)`: draws the full static frame — title bar (LIVE badge + `press Q`
+  hint), meta line (operator · config · cycle · elapsed clock), phase-label row, a per-pair table, a
+  countdown/soak progress bar, and a running-totals line. Records the run start once so the elapsed
+  clock spans the whole run.
+- **Table columns:** `Pair · Serial · TX Mbps · RX Mbps · Status`. The mockup's numeric **Drops**
+  column collapses into **Status** — since any drop = FAIL, a drop just paints the pair's status red
+  (`FAIL`). Numeric rate cells are colored green/red vs target in Phase A.
+- Updaters: `setCycle`, `refreshElapsed`, `setPhaseLine`, `updatePairRate(pair, isRx, val, color)`,
+  `updatePairStatus(pair, PairStatus)`, `drawProgressBar(label, pct, subtext)` (ASCII bar — robust on
+  the rig), `setTotals(done, failed)`.
+- `bool pollStopKey()` — non-blocking `q` check for the update loops (already in place from M3).
+
+*Deferred:* a dedicated amber `showError` panel and a redesigned `showSummary` result screen are
+folded into M6 (reports); the connectivity/ping screen keeps its existing simple page for now.
 
 ---
 

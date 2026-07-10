@@ -64,12 +64,23 @@ namespace LANEXTest {
         return res;
     }
 
-    // Pumps the UI (countdown, and live rates in Phase A) and polls for 'q' until every
-    // future is ready. On stop, force-kills all iperf3/ssh processes so the current
+    // Counts finished vs failed pairs in the current cycle and pushes them to the
+    // running-totals line. DONE = completed this cycle so far; FAILED = dropped/errored.
+    static void pushTotals(PairCycle *cyc, int n) {
+        int done = 0, failed = 0;
+        for(int i = 0; i < n; i++) {
+            if(cyc[i].status == DONE)        done++;
+            else if(cyc[i].status == FAILED) failed++;
+        }
+        InterfaceUtils::setTotals(done, failed);
+    }
+
+    // Pumps the UI (countdown bar, elapsed clock, live rates) and polls for 'q' until
+    // every future is ready. On stop, force-kills all iperf3/ssh processes so the current
     // measurements return promptly; the interrupted cycle is discarded by the caller.
     static void pumpFutures(std::vector<std::future<IperfExecutor::IperfResult>> &futs,
                             testData &td, int numPairs, std::atomic<bool> &stop,
-                            const std::string &phaseLabel, int totalSeconds, bool showRates) {
+                            const std::string &barLabel, int totalSeconds, bool showRates) {
         auto start = std::chrono::steady_clock::now();
         bool killed = false;
         while(true) {
@@ -90,19 +101,20 @@ namespace LANEXTest {
 
             if(showRates) {
                 for(int i = 0; i < numPairs; i++) {
-                    if(td.currentTxRate[i] != -1) InterfaceUtils::updateTxOfPair(i, std::to_string((int)td.currentTxRate[i]));
-                    if(td.currentRxRate[i] != -1) InterfaceUtils::updateRxOfPair(i, std::to_string((int)td.currentRxRate[i]));
+                    if(td.currentTxRate[i] != -1)
+                        InterfaceUtils::updatePairRate(i, false, std::to_string((int)td.currentTxRate[i]), InterfaceUtils::CP_TEAL);
+                    if(td.currentRxRate[i] != -1)
+                        InterfaceUtils::updatePairRate(i, true, std::to_string((int)td.currentRxRate[i]), InterfaceUtils::CP_TEAL);
                 }
             }
 
             int elapsed = (int)std::chrono::duration_cast<std::chrono::seconds>(
                 std::chrono::steady_clock::now() - start).count();
-            int left = totalSeconds - elapsed;
-            if(left < 0) left = 0;
-            std::string status = stop
-                ? (phaseLabel + " | stopping...")
-                : (phaseLabel + " | ~" + std::to_string(left) + "s | press q to stop");
-            InterfaceUtils::updateProgress(status);
+            if(elapsed > totalSeconds) elapsed = totalSeconds;
+            int pct = totalSeconds > 0 ? (elapsed * 100 / totalSeconds) : 100;
+            std::string sub = std::to_string(elapsed) + "s / " + std::to_string(totalSeconds) + "s";
+            InterfaceUtils::drawProgressBar(stop ? (barLabel + " (stopping)") : barLabel, pct, sub);
+            InterfaceUtils::refreshElapsed();
 
             usleep(150 * 1000);
         }
@@ -128,8 +140,11 @@ namespace LANEXTest {
                        std::atomic<bool> &stop, RunSummary &sum) {
         int n = tc->numOfPairs;
         int dur = sc->phaseDuration;
+        InterfaceUtils::setPhaseLine("Phase A  max throughput - one pair at a time, " +
+            std::to_string(dur) + "s each direction");
         for(int pair = 0; pair < n && !stop; pair++) {
             cyc[pair].status = RUNNING;
+            InterfaceUtils::updatePairStatus(pair, RUNNING);
             for(int dir = 0; dir < 2 && !stop; dir++) {
                 bool reversed = (dir == 1);
                 int port = PORT_START + pair;
@@ -139,24 +154,36 @@ namespace LANEXTest {
                     return measureWithRetry(td, sc, pair, port, dur, reversed, 0, false, sc->retries, stop);
                 }));
 
-                std::string label = "Cycle " + std::to_string(sum.cyclesCompleted + 1) +
-                    " | Phase A | Pair " + std::to_string(pair + 1) + "/" + std::to_string(n) +
-                    (reversed ? " RX" : " TX");
+                std::string label = reversed
+                    ? ("Pair " + std::to_string(pair + 1) + " RX")
+                    : ("Pair " + std::to_string(pair + 1) + " TX");
                 pumpFutures(futs, td, n, stop, label, dur, true);
 
                 IperfExecutor::IperfResult res = futs[0].get();
                 if(stop) { return; } // discard interrupted cycle
 
                 if(res == IperfExecutor::IPERF_RESULT_COMPLETED) {
-                    if(reversed) cyc[pair].rxRate = td.averageRxRate[pair];
-                    else         cyc[pair].txRate = td.averageTxRate[pair];
+                    // Paint the final value colored against its target (green pass / red miss).
+                    if(reversed) {
+                        cyc[pair].rxRate = td.averageRxRate[pair];
+                        int color = cyc[pair].rxRate >= sc->rxTargetSpeed ? InterfaceUtils::CP_GREEN : InterfaceUtils::CP_RED;
+                        InterfaceUtils::updatePairRate(pair, true, std::to_string((int)cyc[pair].rxRate), color);
+                    } else {
+                        cyc[pair].txRate = td.averageTxRate[pair];
+                        int color = cyc[pair].txRate >= sc->txTargetSpeed ? InterfaceUtils::CP_GREEN : InterfaceUtils::CP_RED;
+                        InterfaceUtils::updatePairRate(pair, false, std::to_string((int)cyc[pair].txRate), color);
+                    }
                 } else if(res == IperfExecutor::IPERF_RESULT_CONNECTION_DROP) {
                     recordDrop(sum, cyc, pair, reversed ? "Phase A RX" : "Phase A TX");
+                    InterfaceUtils::updatePairRate(pair, reversed, "drop", InterfaceUtils::CP_RED);
                 } else {
                     recordError(sum, cyc, pair, reversed ? "Phase A RX" : "Phase A TX");
+                    InterfaceUtils::updatePairRate(pair, reversed, "err", InterfaceUtils::CP_RED);
                 }
             }
             if(cyc[pair].status != FAILED) cyc[pair].status = DONE;
+            InterfaceUtils::updatePairStatus(pair, cyc[pair].status);
+            pushTotals(cyc, n);
         }
     }
 
@@ -174,8 +201,9 @@ namespace LANEXTest {
             // doesn't measure.
             td.currentTxRate[pair] = -1;
             td.currentRxRate[pair] = -1;
-            if(reversed) InterfaceUtils::updateRxOfPair(pair, "soak");
-            else         InterfaceUtils::updateTxOfPair(pair, "soak");
+            InterfaceUtils::updatePairRate(pair, reversed, "...", InterfaceUtils::CP_DIM);
+            // A pair that already failed in Phase A stays FAILED; others soak as RUNNING.
+            if(cyc[pair].status != FAILED) InterfaceUtils::updatePairStatus(pair, RUNNING);
         }
 
         std::vector<std::future<IperfExecutor::IperfResult>> futs;
@@ -186,23 +214,27 @@ namespace LANEXTest {
             }));
         }
 
-        std::string label = "Cycle " + std::to_string(sum.cyclesCompleted + 1) +
-            " | Phase B " + dirLabel + " | soak all " + std::to_string(n) + " pairs @" + std::to_string(cap) + "m";
+        std::string label = "Soak " + dirLabel + " @" + std::to_string(cap) + "m";
         pumpFutures(futs, td, n, stop, label, dur, true);
 
         for(int pair = 0; pair < n; pair++) {
             IperfExecutor::IperfResult res = futs[pair].get();
             if(stop) continue; // discard interrupted cycle
-            std::string cell = "OK";
             if(res == IperfExecutor::IPERF_RESULT_CONNECTION_DROP) {
                 recordDrop(sum, cyc, pair, "Phase B " + dirLabel);
-                cell = "DROP";
+                InterfaceUtils::updatePairRate(pair, reversed, "drop", InterfaceUtils::CP_RED);
             } else if(res == IperfExecutor::IPERF_RESULT_SETUP_ERROR) {
                 recordError(sum, cyc, pair, "Phase B " + dirLabel);
-                cell = "ERR";
+                InterfaceUtils::updatePairRate(pair, reversed, "err", InterfaceUtils::CP_RED);
+            } else {
+                // Completed with no drop: keep the last live rate, mark green.
+                if(td.currentTxRate[pair] >= 0 || td.currentRxRate[pair] >= 0) {
+                    float v = reversed ? td.currentRxRate[pair] : td.currentTxRate[pair];
+                    if(v >= 0) InterfaceUtils::updatePairRate(pair, reversed, std::to_string((int)v), InterfaceUtils::CP_GREEN);
+                }
             }
-            if(reversed) InterfaceUtils::updateRxOfPair(pair, cell);
-            else         InterfaceUtils::updateTxOfPair(pair, cell);
+            InterfaceUtils::updatePairStatus(pair, cyc[pair].status);
+            pushTotals(cyc, n);
         }
     }
 
@@ -216,9 +248,11 @@ namespace LANEXTest {
         if(half < 1) half = 1;
         int cap = sc->soakCap;
 
+        InterfaceUtils::setPhaseLine("Phase B  parallel soak - all pairs at once, capped " +
+            std::to_string(cap) + " Mbps, TX then RX");
         for(int pair = 0; pair < tc->numOfPairs; pair++) {
-            InterfaceUtils::updateTxOfPair(pair, "-");
-            InterfaceUtils::updateRxOfPair(pair, "-");
+            InterfaceUtils::updatePairRate(pair, false, "-", InterfaceUtils::CP_DIM);
+            InterfaceUtils::updatePairRate(pair, true, "-", InterfaceUtils::CP_DIM);
         }
 
         soakHalf(td, sc, tc, cyc, stop, sum, false, half, cap, "TX"); // client -> server
@@ -267,6 +301,15 @@ namespace LANEXTest {
         InterfaceUtils::setNonBlockingInput(true);
         std::atomic<bool> stop(false);
 
+        // Static context for the live monitor (drawn fresh each cycle).
+        InterfaceUtils::MonitorInfo info;
+        info.operatorInitials = tc->operatorInitials;
+        info.configName       = tc->configurationName;
+        info.numPairs         = n;
+        info.txTarget         = sc->txTargetSpeed;
+        info.rxTarget         = sc->rxTargetSpeed;
+        info.serials          = tc->serialNumberPairs;
+
         while(!stop) {
             // Fresh live data + per-cycle scratch. Clearing logs each cycle keeps
             // memory bounded over a long run (the report keeps the last cycle's logs).
@@ -277,7 +320,8 @@ namespace LANEXTest {
             }
             PairCycle cyc[MAX_PAIRS];
 
-            InterfaceUtils::createNewTestMonitorPage(tc);
+            InterfaceUtils::beginTestMonitor(info);
+            InterfaceUtils::setCycle(sum.cyclesCompleted + 1);
 
             phaseA(td, sc, tc, cyc, stop, sum);
             if(stop) break;

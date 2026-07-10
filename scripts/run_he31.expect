@@ -50,7 +50,7 @@ expect "input:"
 send "y\r"
 
 expect {
-    "Test in progress" {
+    "max throughput" {
         interact
     }
     "Press any key to try again" {
