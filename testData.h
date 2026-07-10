@@ -2,6 +2,7 @@
 #define TEST_DATA_H
 #include <string>
 #include <vector>
+#include <atomic>
 #include "constants.h"
 namespace LANEXTest {
     // Live per-pair rates used by the current UI update loop.
@@ -12,6 +13,10 @@ namespace LANEXTest {
         float averageRxRate[MAX_PAIRS];
         float averageTxRate[MAX_PAIRS];
         std::string testLogs[MAX_PAIRS];
+        // Set by the measurement worker thread, read by the UI pump thread: 0 = not
+        // retrying, N = setup-error retry attempt N in progress (drives the amber
+        // "retry N/M" status cell). Atomic so the cross-thread read is safe.
+        std::atomic<int> retryAttempt[MAX_PAIRS];
     };
 
     // Per-pair status shown on the live monitor.

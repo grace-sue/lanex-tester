@@ -275,6 +275,15 @@ namespace InterfaceUtils {
         refresh();
     }
 
+    void updatePairRetry(int pair, int attempt, int maxAttempts) {
+        if(pair < 0 || pair >= M.info.numPairs) return;
+        int y = ROW_PAIR0 + pair;
+        std::string cell = "retry " + std::to_string(attempt) + "/" + std::to_string(maxAttempts);
+        putField(y, X_STATUS, W_STATUS, cell, CP_AMBER, true, false);
+        parkCursor();
+        refresh();
+    }
+
     void drawProgressBar(const std::string &label, int pct, const std::string &subtext) {
         if(pct < 0) pct = 0;
         if(pct > 100) pct = 100;

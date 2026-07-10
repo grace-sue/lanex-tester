@@ -59,8 +59,10 @@ namespace LANEXTest {
         int attempt = 0;
         while(res == IperfExecutor::IPERF_RESULT_SETUP_ERROR && attempt < retries && !stop) {
             attempt++;
+            td.retryAttempt[pair].store(attempt);   // published to the UI pump for the amber cell
             res = runOneMeasurement(td, sc, pair, port, duration, reversed, cap, bidir);
         }
+        td.retryAttempt[pair].store(0);
         return res;
     }
 
@@ -80,9 +82,11 @@ namespace LANEXTest {
     // measurements return promptly; the interrupted cycle is discarded by the caller.
     static void pumpFutures(std::vector<std::future<IperfExecutor::IperfResult>> &futs,
                             testData &td, int numPairs, std::atomic<bool> &stop,
-                            const std::string &barLabel, int totalSeconds, bool showRates) {
+                            const std::string &barLabel, int totalSeconds, bool showRates,
+                            int maxRetries) {
         auto start = std::chrono::steady_clock::now();
         bool killed = false;
+        std::vector<bool> wasRetrying(numPairs, false);
         while(true) {
             bool allDone = true;
             for(auto &f : futs) {
@@ -105,6 +109,19 @@ namespace LANEXTest {
                         InterfaceUtils::updatePairRate(i, false, std::to_string((int)td.currentTxRate[i]), InterfaceUtils::CP_TEAL);
                     if(td.currentRxRate[i] != -1)
                         InterfaceUtils::updatePairRate(i, true, std::to_string((int)td.currentRxRate[i]), InterfaceUtils::CP_TEAL);
+                }
+            }
+
+            // Surface setup-error retries published by the worker threads as an amber
+            // "retry N/M" status cell; restore RUNNING once the retry resolves.
+            for(int i = 0; i < numPairs; i++) {
+                int ra = td.retryAttempt[i].load();
+                if(ra > 0) {
+                    InterfaceUtils::updatePairRetry(i, ra, maxRetries);
+                    wasRetrying[i] = true;
+                } else if(wasRetrying[i]) {
+                    InterfaceUtils::updatePairStatus(i, RUNNING);
+                    wasRetrying[i] = false;
                 }
             }
 
@@ -157,7 +174,7 @@ namespace LANEXTest {
                 std::string label = reversed
                     ? ("Pair " + std::to_string(pair + 1) + " RX")
                     : ("Pair " + std::to_string(pair + 1) + " TX");
-                pumpFutures(futs, td, n, stop, label, dur, true);
+                pumpFutures(futs, td, n, stop, label, dur, true, sc->retries);
 
                 IperfExecutor::IperfResult res = futs[0].get();
                 if(stop) { return; } // discard interrupted cycle
@@ -215,7 +232,7 @@ namespace LANEXTest {
         }
 
         std::string label = "Soak " + dirLabel + " @" + std::to_string(cap) + "m";
-        pumpFutures(futs, td, n, stop, label, dur, true);
+        pumpFutures(futs, td, n, stop, label, dur, true, sc->retries);
 
         for(int pair = 0; pair < n; pair++) {
             IperfExecutor::IperfResult res = futs[pair].get();
@@ -317,6 +334,7 @@ namespace LANEXTest {
                 td.currentRxRate[i] = td.currentTxRate[i] = -1;
                 td.averageRxRate[i] = td.averageTxRate[i] = -1;
                 td.testLogs[i] = "";
+                td.retryAttempt[i].store(0);
             }
             PairCycle cyc[MAX_PAIRS];
 

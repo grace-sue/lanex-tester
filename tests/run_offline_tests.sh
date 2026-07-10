@@ -29,8 +29,12 @@ g++ -I. tests/harness.cpp iperfExecutor.cpp serverConfigurationLoader.cpp \
 
 echo
 echo "M1 — config parsing"
-check "new config keys load with expected values" \
-    "tx=90 rx=190 phaseDuration=5 soakDuration=30 soakCap=10 retries=3" \
+# Derive the expected values from the live config file so tuning operator targets
+# doesn't break the test — it verifies the loader parses whatever is on disk.
+cfg() { grep -i "^$1:" config/targetBandwidth.conf | head -1 | cut -d: -f2; }
+EXPECT_CFG="tx=$(cfg TX) rx=$(cfg RX) phaseDuration=$(cfg phaseDuration) soakDuration=$(cfg soakDuration) soakCap=$(cfg soakCap) retries=$(cfg retries)"
+check "config keys load matching config/targetBandwidth.conf" \
+    "$EXPECT_CFG" \
     "$("$TMP/harness" config)"
 
 # Fake ssh: logs its args, then emits canned iperf3 output selected by FAKE_MODE.

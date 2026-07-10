@@ -224,8 +224,12 @@ t=30s   wall clock hits → remaining pairs stop → Phase B done
   column collapses into **Status** — since any drop = FAIL, a drop just paints the pair's status red
   (`FAIL`). Numeric rate cells are colored green/red vs target in Phase A.
 - Updaters: `setCycle`, `refreshElapsed`, `setPhaseLine`, `updatePairRate(pair, isRx, val, color)`,
-  `updatePairStatus(pair, PairStatus)`, `drawProgressBar(label, pct, subtext)` (ASCII bar — robust on
-  the rig), `setTotals(done, failed)`.
+  `updatePairStatus(pair, PairStatus)`, `updatePairRetry(pair, attempt, max)`,
+  `drawProgressBar(label, pct, subtext)` (ASCII bar — robust on the rig), `setTotals(done, failed)`.
+- **Retry feedback:** a setup-error retry runs inside the measurement worker thread, so it can't touch
+  ncurses directly. The worker publishes its attempt number via `testData::retryAttempt[pair]`
+  (`std::atomic<int>`); the UI pump reads it each tick and paints an amber `retry N/M` in the Status
+  cell, restoring `running` once the retry resolves.
 - `bool pollStopKey()` — non-blocking `q` check for the update loops (already in place from M3).
 
 *Deferred:* a dedicated amber `showError` panel and a redesigned `showSummary` result screen are
