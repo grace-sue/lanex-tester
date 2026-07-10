@@ -30,7 +30,7 @@ g++ -I. tests/harness.cpp iperfExecutor.cpp serverConfigurationLoader.cpp \
 echo
 echo "M1 — config parsing"
 check "new config keys load with expected values" \
-    "tx=90 rx=190 phaseDuration=5 soakDuration=30 soakCap=10 maxConnDrops=0 retries=3" \
+    "tx=90 rx=190 phaseDuration=5 soakDuration=30 soakCap=10 retries=3" \
     "$("$TMP/harness" config)"
 
 # Fake ssh: logs its args, then emits canned iperf3 output selected by FAKE_MODE.
@@ -42,6 +42,7 @@ case "$FAKE_MODE" in
   COMPLETED)  printf 'Connecting to host\n[  5] connected to x\n[  5]   0.00-1.00   sec  100 MBytes   900 Mbits/sec\n[  5]   0.00-5.00   sec  500 MBytes   900 Mbits/sec   receiver\niperf Done.\n' ;;
   DROP)       printf 'Connecting to host\n[  5] connected to x\n[  5]   0.00-1.00   sec  100 MBytes   900 Mbits/sec\n' ;;
   DROP_BIDIR) printf 'Connecting to host\n[  5][TX-C]   0.00-1.00   sec  1.10 MBytes  9.90 Mbits/sec\n[  7][RX-C]   0.00-1.00   sec  1.19 MBytes  9.80 Mbits/sec\n' ;;
+  STALL)      printf 'Connecting to host\n[  4]   0.00-1.00   sec  109 MBytes   915 Mbits/sec\n[  4]   1.00-2.00   sec  0.00 Bytes  0.00 bits/sec\n[  4]   2.00-3.00   sec  109 MBytes   915 Mbits/sec\n[  4]   0.00-3.00   sec  218 MBytes   610 Mbits/sec   receiver\niperf Done.\n' ;;
   SETUP)      printf 'iperf3: error - unable to connect to server: Connection refused\n' ;;
 esac
 SSH
@@ -55,6 +56,7 @@ check "single: clean finish -> COMPLETED"       "COMPLETED"       "$(FAKE_MODE=C
 check "single: died         -> CONNECTION_DROP" "CONNECTION_DROP" "$(FAKE_MODE=DROP       "$TMP/harness" iperf 0 0 0)"
 check "never connected      -> SETUP_ERROR"     "SETUP_ERROR"     "$(FAKE_MODE=SETUP      "$TMP/harness" iperf 0 0 0)"
 check "bidir: died          -> CONNECTION_DROP" "CONNECTION_DROP" "$(FAKE_MODE=DROP_BIDIR "$TMP/harness" iperf 10 1 0)"
+check "0-byte interval       -> CONNECTION_DROP" "CONNECTION_DROP" "$(FAKE_MODE=STALL      "$TMP/harness" iperf 0 0 0)"
 
 echo
 echo "M2 — iperf3 command flags"

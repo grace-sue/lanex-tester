@@ -31,7 +31,6 @@ namespace ServerConfigurationLoader {
         outConf.phaseDuration = 5;
         outConf.soakDuration = 30;
         outConf.soakCap = 10;
-        outConf.maxConnDrops = 0;
         outConf.retries = 3;
         
         // Load server ips
@@ -59,8 +58,6 @@ namespace ServerConfigurationLoader {
                 outConf.soakDuration = std::stoi(currLine.substr(currLine.find(":") + 1));
             } else if(currLine.find("soakCap:") != std::string::npos){
                 outConf.soakCap = std::stoi(currLine.substr(currLine.find(":") + 1));
-            } else if(currLine.find("maxConnDrops:") != std::string::npos){
-                outConf.maxConnDrops = std::stoi(currLine.substr(currLine.find(":") + 1));
             } else if(currLine.find("retries:") != std::string::npos){
                 outConf.retries = std::stoi(currLine.substr(currLine.find(":") + 1));
             }

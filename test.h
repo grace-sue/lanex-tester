@@ -14,7 +14,7 @@ namespace LANEXTest {
                        ServerConfigurationLoader::ServerConfiguration *serverConf,
                        testData &td, RunSummary &sum);
 
-    // Final per-pair verdict: passed throughput every cycle AND stayed within the drop limit.
-    bool pairPassed(const RunSummary &sum, int pair, int maxConnDrops);
+    // Final per-pair verdict: passed every cycle (any throughput miss or drop fails it).
+    bool pairPassed(const RunSummary &sum, int pair);
 };
 #endif

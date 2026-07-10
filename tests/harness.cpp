@@ -25,9 +25,9 @@ static const char* resultName(IperfExecutor::IperfResult r) {
 int main(int argc, char** argv) {
     if (argc >= 2 && strcmp(argv[1], "config") == 0) {
         auto c = ServerConfigurationLoader::loadConfiguration();
-        printf("tx=%.0f rx=%.0f phaseDuration=%d soakDuration=%d soakCap=%d maxConnDrops=%d retries=%d\n",
+        printf("tx=%.0f rx=%.0f phaseDuration=%d soakDuration=%d soakCap=%d retries=%d\n",
                c.txTargetSpeed, c.rxTargetSpeed, c.phaseDuration, c.soakDuration,
-               c.soakCap, c.maxConnDrops, c.retries);
+               c.soakCap, c.retries);
         return 0;
     }
     if (argc >= 5 && strcmp(argv[1], "iperf") == 0) {

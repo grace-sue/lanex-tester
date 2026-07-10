@@ -130,9 +130,16 @@ namespace IperfExecutor {
         std::string serverAddress, int serverPort, bool isReversed, int bandwidthCap, bool bidir) {
 
         std::string cmd;
+        // Hard cap on the whole measurement: if the link (and thus the ssh session) dies,
+        // this guarantees the command is killed instead of blocking our read forever.
+        cmd += "timeout ";
+        cmd += std::to_string(duration + 15);
+        cmd += " ";
         // -n keeps ssh from reading the terminal's stdin, otherwise the ssh clients
         // swallow the operator's 'q' keypress instead of it reaching the app.
-        cmd += "ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR -n ";
+        // ServerAlive* makes ssh detect a dead session (~6s) and exit, so a connection
+        // drop ends the read (EOF) instead of hanging. ConnectTimeout only covers connecting.
+        cmd += "ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=3 -o ServerAliveCountMax=2 -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR -n ";
         cmd += "ubnt@";
         cmd += remoteAddress;
         cmd += " iperf3 -c ";
@@ -163,6 +170,7 @@ namespace IperfExecutor {
         td->testLogs[clientId] += "---\n";
         bool sawProgress = false;   // connection established and data actually flowed
         bool completed = false;     // reached a clean finish ("iperf Done.")
+        bool hadStall = false;      // an interval moved 0 bytes (a momentary link drop)
 
         while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
             td->testLogs[clientId] += buffer.data();
@@ -179,6 +187,7 @@ namespace IperfExecutor {
                     float rate = extractBitrate(raw);
                     if(rate >= 0) {
                         sawProgress = true;
+                        if(rate <= 0.0f) hadStall = true; // 0-byte interval = drop
                         if(isTx) td->currentTxRate[clientId] = rate;
                         if(isRx) td->currentRxRate[clientId] = rate;
                     }
@@ -190,6 +199,7 @@ namespace IperfExecutor {
             // log progress
             if(msg.type == IPERF_PROGRESS_STATS) {
                 sawProgress = true;
+                if(msg.bitrate <= 0.0f) hadStall = true; // 0-byte interval = drop
                 if(isReversed) {
                     td->currentRxRate[clientId] = msg.bitrate;
                 } else {
@@ -202,6 +212,11 @@ namespace IperfExecutor {
             }
         }
 
+        if(hadStall) {
+            // An interval moved 0 bytes: the link stalled mid-run. Count it as a drop even
+            // if iperf3 recovered and printed "iperf Done.".
+            return IPERF_RESULT_CONNECTION_DROP;
+        }
         if(completed) {
             return IPERF_RESULT_COMPLETED;
         }

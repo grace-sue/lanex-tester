@@ -37,13 +37,13 @@ int main() {
         summary += "Ended:   " + sum.endTime + "\n";
         summary += "Cycles completed: " + std::to_string(sum.cyclesCompleted) + "\n\n";
         for(int i = 0; i < tc.numOfPairs; i++) {
-            bool p = LANEXTest::pairPassed(sum, i, serverConf.maxConnDrops);
+            bool p = LANEXTest::pairPassed(sum, i);
             if(p) passedPairs++;
             summary += "Pair " + std::to_string(i + 1) + " (" + tc.serialNumberPairs[i] + "): " +
                        (p ? "PASS" : "FAIL") +
                        "   peakTX=" + std::to_string((int)sum.peakTx[i]) +
                        " peakRX=" + std::to_string((int)sum.peakRx[i]) +
-                       " drops=" + std::to_string(sum.connectionDrops[i]) + "\n";
+                       (sum.dropped[i] ? "  (dropped)" : "") + "\n";
         }
         summary += "\n" + std::to_string(passedPairs) + " / " +
                    std::to_string(tc.numOfPairs) + " pairs passed";

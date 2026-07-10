@@ -39,6 +39,10 @@ namespace LANEXTest {
         IperfExecutor::IperfResult res = IperfExecutor::startRemoteIperf3Client(
             duration, &td, pair, sc->clientIps[pair], sc->serverIps[pair], port, reversed, cap, bidir);
 
+        // The client has returned (finished or dropped). Kill the local server now so
+        // join() returns promptly — otherwise a dropped connection leaves the --one-off
+        // server stuck on the dead socket until its own timeout, stalling the measurement.
+        IperfExecutor::stopLocalIperf3Server(port);
         server.join();
         return res;
     }
@@ -105,7 +109,7 @@ namespace LANEXTest {
     }
 
     static void recordDrop(RunSummary &sum, PairCycle *cyc, int pair, const std::string &where) {
-        sum.connectionDrops[pair]++;
+        sum.dropped[pair] = true;
         sum.dropLog.push_back("cycle " + std::to_string(sum.cyclesCompleted + 1) +
             " · pair " + std::to_string(pair + 1) +
             " · connection lost (" + where + ") @" + timestampNow());
@@ -238,8 +242,10 @@ namespace LANEXTest {
         }
     }
 
-    bool pairPassed(const RunSummary &sum, int pair, int maxConnDrops) {
-        return sum.failCount[pair] == 0 && sum.connectionDrops[pair] <= maxConnDrops;
+    bool pairPassed(const RunSummary &sum, int pair) {
+        // A pair fails a cycle if it misses throughput OR drops (a drop marks the cycle
+        // FAILED), so failCount already captures both — any single drop fails the pair.
+        return sum.failCount[pair] == 0;
     }
 
     void runContinuous(ConfigureTest::testConfiguration *tc,
