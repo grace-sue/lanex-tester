@@ -11,10 +11,12 @@ proc env_or_default {name default_value} {
 }
 
 set operator_initials [env_or_default "LANEX_OPERATOR" "GS"]
+set num_pairs [env_or_default "LANEX_NUM_PAIRS" "3"]
+set num_switches [env_or_default "LANEX_NUM_SWITCHES" "1"]
 set pair1 [env_or_default "LANEX_PAIR1" "1234567-7654321"]
 set pair2 [env_or_default "LANEX_PAIR2" "2234567-7654322"]
 set pair3 [env_or_default "LANEX_PAIR3" "3234567-7654323"]
-set switch1 [env_or_default "LANEX_SWITCH1" "123456"]
+set switch1 [env_or_default "LANEX_SWITCH1" "3A9F2C"]
 set stop_after_ms [env_or_default "LANEX_STOP_AFTER_MS" "5000"]
 
 spawn ./LAN-EX-Tester
@@ -23,7 +25,10 @@ expect "input:"
 send "$operator_initials\r"
 
 expect "input:"
-send "HE-31\r"
+send "$num_pairs\r"
+
+expect "input:"
+send "$num_switches\r"
 
 expect "input:"
 send "$pair1\r"

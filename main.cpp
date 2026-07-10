@@ -27,36 +27,18 @@ int main() {
     LANEXTest::RunSummary sum;
     LANEXTest::runContinuous(&tc, &serverConf, testData, sum);
 
-    // Build the per-pair summary
-    std::string summary;
+    // Build the per-pair summary (shared with the report file so they can't disagree).
     int passedPairs = 0;
-    if(sum.cyclesCompleted == 0) {
-        summary = "No complete test cycles were run.";
-    } else {
-        summary += "Started: " + sum.startTime + "\n";
-        summary += "Ended:   " + sum.endTime + "\n";
-        summary += "Cycles completed: " + std::to_string(sum.cyclesCompleted) + "\n\n";
-        for(int i = 0; i < tc.numOfPairs; i++) {
-            bool p = LANEXTest::pairPassed(sum, i);
-            if(p) passedPairs++;
-            summary += "Pair " + std::to_string(i + 1) + " (" + tc.serialNumberPairs[i] + "): " +
-                       (p ? "PASS" : "FAIL") +
-                       "   peakTX=" + std::to_string((int)sum.peakTx[i]) +
-                       " peakRX=" + std::to_string((int)sum.peakRx[i]) +
-                       (sum.dropped[i] ? "  (dropped)" : "") + "\n";
-        }
-        summary += "\n" + std::to_string(passedPairs) + " / " +
-                   std::to_string(tc.numOfPairs) + " pairs passed";
-    }
+    std::string summary = ReportGenerator::buildRunSummaryText(&tc, sum, passedPairs);
     InterfaceUtils::createNewPage("Run Summary", summary, "Press any key to save log & exit");
     getch();
 
     bool overallPass = (sum.cyclesCompleted > 0 && passedPairs == tc.numOfPairs);
 
-    // Save engineering report (raw logs from the last cycle).
-    // NOTE: the per-pair summary report file is produced in Milestone 6.
-    bool reportSaved = ReportGenerator::saveEngReport(&tc, &testData, overallPass);
-    if(!reportSaved) {
+    // Save the per-pair summary report and the engineering report (raw logs, last cycle).
+    bool summarySaved = ReportGenerator::saveSummaryReport(&tc, sum);
+    bool engSaved = ReportGenerator::saveEngReport(&tc, &testData, overallPass);
+    if(!summarySaved || !engSaved) {
         InterfaceUtils::createNewPage("Error!", "ERROR: The report could not be saved", "Press any key to exit");
         getch();
     }

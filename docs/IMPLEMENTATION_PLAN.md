@@ -237,16 +237,22 @@ folded into M6 (reports); the connectivity/ping screen keeps its existing simple
 
 ---
 
-## 9. Reports  *(Milestone 6)*
+## 9. Reports  *(Milestone 6 — done)*
 
-**`reportGenerator.cpp/.h`** — take `RunSummary`:
+**`reportGenerator.cpp/.h`** — driven by `RunSummary`:
 
-- **Summary report:** operator, **start → end time**, cycles completed, a **per-pair verdict** for each
-  pair (peak TX/RX, whether it dropped, PASS/FAIL), and a **rollup line** ("4 / 5 pairs passed").
-  There is no single all-or-nothing verdict — the per-pair results are the authoritative outcome.
-- **Drop / error section:** dump `dropLog` + `errorLog` so failures are **documented in the report**.
-- **Eng report:** capped raw iperf logs.
-- Each pair's verdict = passed every cycle it ran (`failCount == 0`); any throughput miss or drop fails it.
+- **`buildRunSummaryText(tc, sum, &passed)`** — the compact per-pair verdict text, shared by the
+  on-screen result (`main.cpp`) and the summary file so they can never disagree.
+- **`saveSummaryReport(tc, sum)`** — writes the summary file
+  (`reports/<config>_<serial|switch>_<YYYYMMDD_HHMMSS>.txt` — the run timestamp keeps every run's
+  file unique instead of overwriting) and appends it to `reports/allReports.txt`. Contents: accountable header (operator, config,
+  **start → end time**, cycles completed), a **per-pair verdict** (peak TX/RX, `(dropped)` marker,
+  PASS/FAIL), a **rollup line** ("1 / 3 pairs passed"), and **Connection drops / Errors** sections
+  dumping `dropLog` + `errorLog` so failures are documented. No single all-or-nothing verdict.
+- Each pair's verdict reuses `LANEXTest::pairPassed` (`failCount == 0`); any throughput miss or drop
+  fails it — the rule stays in one place.
+- **Eng report:** unchanged raw iperf logs (last cycle); filename now shares the `reportBaseName`
+  helper (fixes the old switch-index out-of-range path). Log *capping* is still M7.
 
 ---
 
