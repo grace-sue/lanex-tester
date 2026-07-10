@@ -1,4 +1,5 @@
 #include "reportGenerator.h"
+#include "test.h"          // LANEXTest::pairPassed — keep the verdict rule in one place
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <cerrno>
@@ -78,57 +79,87 @@ namespace ReportGenerator {
         return false;
     }
 
-    bool saveReport(ConfigureTest::testConfiguration *tc) {
-        std::string fileContent = "";
-
-        fileContent += "LAN-EX F/H Tester Report\n\n";
-        fileContent += "Date: ";
-        fileContent += tc->timestamp;
-        fileContent += "\nOperator Initials: ";
-        fileContent += tc->operatorInitials;
-        fileContent += "\nConfiguration name: ";
-        fileContent += tc->configurationName;
-        fileContent += "\n\n";
-
-        // Pairs
-        for(int i = 0; i < tc->numOfPairs; i++) {
-            fileContent += "Pair ";
-            fileContent += std::to_string(i + 1);
-            fileContent += " (";
-            fileContent += tc->serialNumberPairs[i];
-            fileContent += "): PASSED\n";
+    // Compacts a "YYYY-MM-DD HH:MM:SS" timestamp into "YYYYMMDD_HHMMSS" for use in a
+    // file name (no spaces or colons). Falls back gracefully on an unexpected format.
+    static std::string compactTimestamp(const std::string &ts) {
+        std::string digits;
+        for(char c : ts) {
+            if(c >= '0' && c <= '9') digits += c;
         }
-
-        // Switches
-        for(int i = 0; i < tc->numOfSwitches; i++) {
-            fileContent += "Switch ";
-            fileContent += std::to_string(i + 1);
-            fileContent += " (";
-            fileContent += tc->serialNumberSwitches[i];
-            fileContent += "): PASSED\n";
+        if(digits.size() >= 14) {
+            return digits.substr(0, 8) + "_" + digits.substr(8, 6);
         }
+        return digits.empty() ? "nodate" : digits;
+    }
 
+    // Builds the report file name from the configuration: single-pair runs are keyed by
+    // the pair's serial, multi-pair runs by the first switch serial (falling back to the
+    // first pair serial if no switch was recorded). The run timestamp is appended so each
+    // run writes a unique file instead of overwriting a previous one.
+    static std::string reportBaseName(ConfigureTest::testConfiguration *tc) {
         std::string fileName = tc->configurationName;
-
-        if(tc->numOfPairs == 1) {
-            // <configurationName_headSN-fieldSN>
-            fileName += "_";
-            fileName += tc->serialNumberPairs[0];
+        fileName += "_";
+        if(tc->numOfPairs == 1 || tc->serialNumberSwitches.empty()) {
+            fileName += tc->serialNumberPairs.empty() ? "run" : tc->serialNumberPairs[0];
         } else {
-            // <configurationName_switchSN>
-            fileName += "_";
             fileName += tc->serialNumberSwitches[0];
         }
+        fileName += "_" + compactTimestamp(tc->timestamp);
+        return fileName;
+    }
 
-        if(!saveFile(fileContent, fileName)) {
-            return false;
+    std::string buildRunSummaryText(ConfigureTest::testConfiguration *tc,
+                                    const LANEXTest::RunSummary &sum, int &passedPairsOut) {
+        passedPairsOut = 0;
+        if(sum.cyclesCompleted == 0) {
+            return "No complete test cycles were run.";
         }
 
-        if(!appendToAllReports(fileContent)) {
-            return false;
+        std::string out;
+        out += "Started: " + sum.startTime + "\n";
+        out += "Ended:   " + sum.endTime + "\n";
+        out += "Cycles completed: " + std::to_string(sum.cyclesCompleted) + "\n\n";
+        for(int i = 0; i < tc->numOfPairs; i++) {
+            bool p = LANEXTest::pairPassed(sum, i);
+            if(p) passedPairsOut++;
+            out += "Pair " + std::to_string(i + 1) + " (" + tc->serialNumberPairs[i] + "): " +
+                   (p ? "PASS" : "FAIL") +
+                   "   peak TX " + std::to_string((int)sum.peakTx[i]) +
+                   " / RX " + std::to_string((int)sum.peakRx[i]) + " Mbps" +
+                   (sum.dropped[i] ? "   (dropped)" : "") + "\n";
+        }
+        out += "\n" + std::to_string(passedPairsOut) + " / " +
+               std::to_string(tc->numOfPairs) + " pairs passed";
+        return out;
+    }
+
+    bool saveSummaryReport(ConfigureTest::testConfiguration *tc, const LANEXTest::RunSummary &sum) {
+        int passedPairs = 0;
+        std::string body = buildRunSummaryText(tc, sum, passedPairs);
+
+        std::string fileContent = "LAN-EX H/F Tester - Summary Report\n\n";
+        fileContent += "Operator:      " + tc->operatorInitials + "\n";
+        fileContent += "Configuration: " + tc->configurationName + "\n\n";
+        fileContent += body + "\n\n";
+
+        // Documented failures: connection drops and setup errors captured during the run.
+        fileContent += "Connection drops\n--------------------------------------\n";
+        if(sum.dropLog.empty()) {
+            fileContent += "(none)\n";
+        } else {
+            for(const std::string &line : sum.dropLog) fileContent += line + "\n";
+        }
+        fileContent += "\nErrors\n--------------------------------------\n";
+        if(sum.errorLog.empty()) {
+            fileContent += "(none)\n";
+        } else {
+            for(const std::string &line : sum.errorLog) fileContent += line + "\n";
         }
 
-        return true;
+        if(!saveFile(fileContent, reportBaseName(tc))) {
+            return false;
+        }
+        return appendToAllReports(fileContent);
     }
 
     bool saveEngReport(ConfigureTest::testConfiguration *tc, LANEXTest::testData *td, bool passed) {
@@ -162,20 +193,7 @@ namespace ReportGenerator {
 
         }
 
-        // File name
-        std::string fileName = "eng/eng_";
-        fileName += tc->configurationName;
-
-        if(tc->numOfPairs == 1) {
-            // <configurationName_headSN-fieldSN>
-            fileName += "_";
-            fileName += tc->serialNumberPairs[0];
-        } else {
-            // <configurationName_switchSN>
-            fileName += "_";
-            fileName += tc->serialNumberSwitches[0];
-        }
-        return saveFile(fileContent, fileName);
+        return saveFile(fileContent, "eng/eng_" + reportBaseName(tc));
     }
 
 

@@ -13,7 +13,6 @@ namespace ServerConfigurationLoader {
         int phaseDuration;   // seconds per direction, Phase A (throughput)
         int soakDuration;    // seconds, Phase B (capped soak)
         int soakCap;         // Mbps per pair cap, Phase B
-        int maxConnDrops;    // connection drops allowed before a pair FAILs (0 = any drop fails)
         int retries;         // re-attempts for a measurement that couldn't start
     };
     

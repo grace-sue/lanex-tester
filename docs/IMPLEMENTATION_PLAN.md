@@ -29,15 +29,15 @@ From the requirements doc (§2.1 Required):
 | Topic | Decision | Rationale |
 |---|---|---|
 | "Drops" meaning | **Connection drops only** — a pair losing its link during a test. Not packet loss / retransmits. | Matches the operator's real concern; a flaky link is what fails a unit. |
-| Drop → verdict | **Any drop = FAIL.** A pair fails on its **first** connection drop — zero tolerance. (`maxConnDrops = 0`; the knob is kept configurable but defaults to 0.) | The link dropping at all means the unit isn't reliable. |
+| Drop → verdict | **Any drop = FAIL.** A pair fails on its first connection drop — no count, no threshold. (A drop marks the cycle FAILED, which `failCount` already captures, so the verdict is just `failCount == 0`.) | The link dropping at all means the unit isn't reliable; counting drops adds nothing. |
 | Protocol | **TCP throughout.** Phase B adds `-b 10m` to cap the rate. | No UDP/JSON/`Retr` parsing needed; TCP naturally finds max throughput in Phase A. |
 | Bidirectional | Phase B uses `iperf3 --bidir`. Phase A stays sequential (both directions one after another). | Literal read of the requirement. |
 | Pass/Fail scope | **Scored per pair, independently.** Each pair gets its own verdict; one pair failing has no effect on the others. There is no single cycle-wide or run-wide gate — only a rollup count (e.g. "4 / 5 pairs passed"). | On a bench testing several units at once, one flaky pair must not fail the good units tested alongside it. |
-| A pair's verdict | A pair **PASSES** if, across every cycle: (a) it met the `TX`/`RX` throughput targets **in Phase A**, and (b) it had **zero connection drops** (`connectionDrops ≤ maxConnDrops`, default 0). Otherwise **FAIL**. | Accountable per-unit result. |
+| A pair's verdict | A pair **PASSES** if, across every cycle: (a) it met the `TX`/`RX` throughput targets **in Phase A**, and (b) it never dropped. Otherwise **FAIL**. Both reduce to `failCount == 0`. | Accountable per-unit result. |
 | What each phase judges | **Phase A** = throughput test → judged against `TX`/`RX` thresholds. **Phase B** = capped soak → **judged only on connection drops**, not throughput (its job is to expose a link that fails under sustained parallel load). | Separates "is it fast enough?" from "does it stay connected under load?". |
 | Stop key | ncurses **non-blocking** `getch()` (`nodelay`), poll for `q`. | Current `getch()` is blocking; the loop must watch for a keypress. |
 
-Open values chosen as defaults (tunable in config): `soakDuration = 30 s`, `maxConnDrops = 0` (any drop fails), `retries = 3`.
+Open values chosen as defaults (tunable in config): `soakDuration = 30 s`, `retries = 3`. Any drop fails — there is no drop-count threshold.
 
 ---
 
@@ -60,14 +60,13 @@ intervals. **Got "connected" + interval data, then it ended early ⇒ connection
 **Never got "connected" ⇒ setup error** (retry). The pre-test ping already confirms reachability, so a
 mid-stream death is a genuine link drop, not a cold-start hiccup.
 
-**Recording a drop:** increment `connectionDrops[pair]`, append a timestamped line to `dropLog`
-(`"cycle 12 · pair 3 · connection lost @14:22:07"`), show it on screen.
+**Recording a drop:** set `dropped[pair] = true`, append a timestamped line to `dropLog`
+(`"cycle 12 · pair 3 · connection lost @14:22:07"`), show it on screen. There is **no drop count** —
+a drop marks the cycle FAILED, which is all the verdict needs.
 
-**Two separate knobs:**
+**Retries knob:**
 - `retries` — re-attempts of a measurement that **couldn't start** (transient setup error). Does **not**
-  apply to connection drops.
-- `maxConnDrops` — total connection drops a pair may accumulate before FAIL (default **0** — the first
-  drop fails the pair).
+  apply to connection drops — a real drop fails the pair immediately, with no count or threshold.
 
 ---
 
@@ -80,12 +79,11 @@ RX:190
 phaseDuration:5      # seconds per direction, Phase A (throughput, judged vs TX/RX)
 soakDuration:30       # seconds, Phase B (capped soak, judged on connection drops only)
 soakCap:10            # Mbps per pair, Phase B
-maxConnDrops:0        # drops allowed before FAIL; 0 = any connection drop fails the pair
 retries:3             # immediate auto-retry attempts on a failed measurement
 ```
 
 **`serverConfigurationLoader.h/.cpp`** — extend `ServerConfiguration` with
-`phaseDuration, soakDuration, soakCap, maxConnDrops, retries`; parse the new keys
+`phaseDuration, soakDuration, soakCap, retries`; parse the new keys
 (same pattern as the existing `RX:`/`TX:`/`duration:` block).
 
 **New `constants.h`** — `constexpr int MAX_PAIRS = 8;` to replace the literal `8`
@@ -110,7 +108,7 @@ struct RunSummary {                // lives for the whole run
     int   cyclesCompleted = 0;
     int   passCount[MAX_PAIRS] = {0};
     int   failCount[MAX_PAIRS] = {0};
-    int   connectionDrops[MAX_PAIRS] = {0};   // times each pair lost its link
+    bool  dropped[MAX_PAIRS] = {false};       // pair lost its link at least once (any drop = fail)
     float peakTx[MAX_PAIRS] = {0}, peakRx[MAX_PAIRS] = {0};
     std::vector<std::string> dropLog;    // timestamped connection-drop events
     std::vector<std::string> errorLog;   // other errors
@@ -165,9 +163,9 @@ void runContinuous(tc, serverConf, RunSummary& sum);   // the main loop
   A genuine connection drop is **not** routed through here — it fails the pair directly.
 - **`evaluateAndTally`:** score **each pair on its own** — compare its **Phase A** rates vs the `TX`/`RX`
   targets and bump that pair's `passCount`/`failCount` and `peakTx/Rx`. **Phase B throughput is not
-  scored** (only its connection drops are counted). No cross-pair gate: a pair's result never depends on
-  another pair. A pair's final verdict is FAIL if it missed the Phase A throughput target in any cycle
-  **or** `connectionDrops > maxConnDrops`.
+  scored** (only its connection drops matter). No cross-pair gate: a pair's result never depends on
+  another pair. A pair fails a cycle if it missed the Phase A throughput target **or** dropped — both
+  bump `failCount`, so the final verdict is simply `failCount == 0`.
 
 Resolves the existing `// TODO: Kill threads if there's an error` in `test.cpp`.
 
@@ -184,9 +182,8 @@ the tester:
   freezes on `tmp`.
 - **The stop key keeps working.** `q` is polled between attempts, so retrying never locks the operator out.
 
-The two knobs do unrelated jobs: **`retries`** recovers a *failed-to-start* measurement; **`maxConnDrops`**
-(default **0**) is the *connection-drop* tolerance — the first real drop fails the pair regardless of
-`retries`.
+**`retries`** only recovers a *failed-to-start* measurement; a real connection drop fails the pair
+immediately, with no count or threshold.
 
 ### 7b. Phase B soak flow (concurrent)
 
@@ -212,32 +209,50 @@ t=30s   wall clock hits → remaining pairs stop → Phase B done
 
 ---
 
-## 8. Terminal UI  *(Milestone 5)*
+## 8. Terminal UI  *(Milestone 5 — done)*
 
-**`interfaceUtils.cpp/.h`** — bring the live screen to the approved mockups
-(`docs/mockups/lanex-ui-mockups.html`):
+**`interfaceUtils.cpp/.h`** — brought the live screen to the approved mockups
+(`docs/mockups/lanex-ui-mockups.html`), adapted to the binary-drop model:
 
-- `createNewTestMonitorPage`: top status line (LIVE badge + `press Q` hint), meta line
-  (operator · config · cycle · elapsed), and **Drops + Status** columns (Drops = connection-drop count).
-- New updaters: `updateDrops`, `updateStatus`, `updateCycle`, `updateElapsed`, `setPhaseLabel`.
-- `drawBar(label, pct, subtext)` — block-char progress/countdown bar (Phase A countdown, Phase B
-  soak timer, ping progress).
-- `showError(pair, reason, attempt, retries)` — amber error panel.
-- `showSummary(RunSummary&)` — final PASS/FAIL result screen.
-- `bool pollStop()` — non-blocking `q` check for the update loops.
+- Color via ncurses `start_color` + `use_default_colors`: teal = running/active, green = done/pass,
+  amber = retry, red = fail, dim = waiting/muted (the "at-a-glance" cue from the mockups).
+- `beginTestMonitor(MonitorInfo)`: draws the full static frame — title bar (LIVE badge + `press Q`
+  hint), meta line (operator · config · cycle · elapsed clock), phase-label row, a per-pair table, a
+  countdown/soak progress bar, and a running-totals line. Records the run start once so the elapsed
+  clock spans the whole run.
+- **Table columns:** `Pair · Serial · TX Mbps · RX Mbps · Status`. The mockup's numeric **Drops**
+  column collapses into **Status** — since any drop = FAIL, a drop just paints the pair's status red
+  (`FAIL`). Numeric rate cells are colored green/red vs target in Phase A.
+- Updaters: `setCycle`, `refreshElapsed`, `setPhaseLine`, `updatePairRate(pair, isRx, val, color)`,
+  `updatePairStatus(pair, PairStatus)`, `updatePairRetry(pair, attempt, max)`,
+  `drawProgressBar(label, pct, subtext)` (ASCII bar — robust on the rig), `setTotals(done, failed)`.
+- **Retry feedback:** a setup-error retry runs inside the measurement worker thread, so it can't touch
+  ncurses directly. The worker publishes its attempt number via `testData::retryAttempt[pair]`
+  (`std::atomic<int>`); the UI pump reads it each tick and paints an amber `retry N/M` in the Status
+  cell, restoring `running` once the retry resolves.
+- `bool pollStopKey()` — non-blocking `q` check for the update loops (already in place from M3).
+
+*Deferred:* a dedicated amber `showError` panel and a redesigned `showSummary` result screen are
+folded into M6 (reports); the connectivity/ping screen keeps its existing simple page for now.
 
 ---
 
-## 9. Reports  *(Milestone 6)*
+## 9. Reports  *(Milestone 6 — done)*
 
-**`reportGenerator.cpp/.h`** — take `RunSummary`:
+**`reportGenerator.cpp/.h`** — driven by `RunSummary`:
 
-- **Summary report:** operator, **start → end time**, cycles completed, a **per-pair verdict** for each
-  pair (peak TX/RX, connection-drop count, PASS/FAIL), and a **rollup line** ("4 / 5 pairs passed").
-  There is no single all-or-nothing verdict — the per-pair results are the authoritative outcome.
-- **Drop / error section:** dump `dropLog` + `errorLog` so failures are **documented in the report**.
-- **Eng report:** capped raw iperf logs.
-- Each pair's verdict = met throughput in every cycle it ran **and** `connectionDrops ≤ maxConnDrops`.
+- **`buildRunSummaryText(tc, sum, &passed)`** — the compact per-pair verdict text, shared by the
+  on-screen result (`main.cpp`) and the summary file so they can never disagree.
+- **`saveSummaryReport(tc, sum)`** — writes the summary file
+  (`reports/<config>_<serial|switch>_<YYYYMMDD_HHMMSS>.txt` — the run timestamp keeps every run's
+  file unique instead of overwriting) and appends it to `reports/allReports.txt`. Contents: accountable header (operator, config,
+  **start → end time**, cycles completed), a **per-pair verdict** (peak TX/RX, `(dropped)` marker,
+  PASS/FAIL), a **rollup line** ("1 / 3 pairs passed"), and **Connection drops / Errors** sections
+  dumping `dropLog` + `errorLog` so failures are documented. No single all-or-nothing verdict.
+- Each pair's verdict reuses `LANEXTest::pairPassed` (`failCount == 0`); any throughput miss or drop
+  fails it — the rule stays in one place.
+- **Eng report:** unchanged raw iperf logs (last cycle); filename now shares the `reportBaseName`
+  helper (fixes the old switch-index out-of-range path). Log *capping* is still M7.
 
 ---
 

@@ -24,18 +24,31 @@ namespace IperfExecutor {
         IPERF_IGNORE
     };
 
+    // Outcome of a single remote-client run, so the test engine can tell a genuine
+    // connection drop apart from a measurement that never got started.
+    enum IperfResult {
+        IPERF_RESULT_COMPLETED,        // ran to a clean finish ("iperf Done.")
+        IPERF_RESULT_CONNECTION_DROP,  // connected and data flowed, then died mid-test
+        IPERF_RESULT_SETUP_ERROR       // never connected (ssh / setup failure)
+    };
+
     struct IperfMessage;
 
     bool checkFirstCharacters(std::array<char, 128> *buffer, const char *key);
 
     IperfMessage parseIperfBuffer(std::array<char, 128> *buffer);
 
-    void startRemoteIperf3Client(int duration, LANEXTest::testData *td, int clientId, std::string remoteAddress, 
-    std::string serverAddress, int serverPort, bool isReversed);
+    // bandwidthCap: Mbps per pair (0 = uncapped). bidir: run both directions at once (--bidir).
+    IperfResult startRemoteIperf3Client(int duration, LANEXTest::testData *td, int clientId, std::string remoteAddress,
+    std::string serverAddress, int serverPort, bool isReversed, int bandwidthCap = 0, bool bidir = false);
 
     void startLocalIperf3Server(int serverPort, int timeoutSeconds);
 
     void stopLocalIperf3Server(int serverPort);
+
+    // Force-stops every local iperf3 server AND every local ssh client process, so a
+    // measurement's pipe closes promptly even if the remote client won't exit on its own.
+    void stopAllIperf3();
 }
 
 #endif

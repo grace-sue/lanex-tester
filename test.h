@@ -7,9 +7,14 @@
 #include "serverConfigurationLoader.h"
 #include "pingExecutor.h"
 namespace LANEXTest {
-    
-    bool startTest(ConfigureTest::testConfiguration *tc, 
-                ServerConfigurationLoader::ServerConfiguration *serverConf,
-                testData &testData);
+
+    // Runs the continuous two-phase test loop until the operator presses 'q'.
+    // Fills `sum` with the accumulated per-pair results for the report.
+    void runContinuous(ConfigureTest::testConfiguration *tc,
+                       ServerConfigurationLoader::ServerConfiguration *serverConf,
+                       testData &td, RunSummary &sum);
+
+    // Final per-pair verdict: passed every cycle (any throughput miss or drop fails it).
+    bool pairPassed(const RunSummary &sum, int pair);
 };
 #endif
