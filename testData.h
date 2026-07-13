@@ -27,6 +27,7 @@ namespace LANEXTest {
         float txRate = -1, rxRate = -1;   // Mbps, Phase A peaks
         float soakTx = -1, soakRx = -1;   // Mbps, Phase B (live only, not scored)
         PairStatus status = WAITING;
+        bool dropped = false;             // dropped at least once this cycle (counted once)
     };
 
     // Accumulated results for the whole run, written to the report on stop.
@@ -34,7 +35,7 @@ namespace LANEXTest {
         int   cyclesCompleted = 0;
         int   passCount[MAX_PAIRS] = {0};
         int   failCount[MAX_PAIRS] = {0};
-        bool  dropped[MAX_PAIRS] = {false};       // pair lost its link at least once (any drop = fail)
+        int   dropCycles[MAX_PAIRS] = {0};        // cycles with no working link — dropped or couldn't connect (any = fail)
         float peakTx[MAX_PAIRS] = {0}, peakRx[MAX_PAIRS] = {0};
         std::vector<std::string> dropLog;    // timestamped connection-drop events
         std::vector<std::string> errorLog;   // transient / setup errors

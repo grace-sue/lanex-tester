@@ -137,18 +137,32 @@ namespace LANEXTest {
         }
     }
 
+    // Flags this cycle as one where the pair had no working link — whether it dropped
+    // mid-stream or couldn't connect at all. Counted once per cycle even if it happens in
+    // both Phase A and Phase B. The running count is committed in evaluateAndTally only when
+    // the cycle completes (so a cycle discarded by 'q' can't run the count ahead of
+    // cyclesCompleted); the provisional count is shown on screen immediately for feedback.
+    static void markDropCycle(RunSummary &sum, PairCycle *cyc, int pair) {
+        if(!cyc[pair].dropped) {
+            cyc[pair].dropped = true;
+            InterfaceUtils::updatePairDrops(pair, sum.dropCycles[pair] + 1);
+        }
+        cyc[pair].status = FAILED;
+    }
+
     static void recordDrop(RunSummary &sum, PairCycle *cyc, int pair, const std::string &where) {
-        sum.dropped[pair] = true;
+        markDropCycle(sum, cyc, pair);
         sum.dropLog.push_back("cycle " + std::to_string(sum.cyclesCompleted + 1) +
             " · pair " + std::to_string(pair + 1) +
             " · connection lost (" + where + ") @" + timestampNow());
-        cyc[pair].status = FAILED;
     }
+    // A measurement that couldn't start (after retries) means the pair had no working link
+    // this cycle, so it counts as a drop-cycle too — recorded here and in the Errors log.
     static void recordError(RunSummary &sum, PairCycle *cyc, int pair, const std::string &where) {
+        markDropCycle(sum, cyc, pair);
         sum.errorLog.push_back("cycle " + std::to_string(sum.cyclesCompleted + 1) +
             " · pair " + std::to_string(pair + 1) +
             " · could not start (" + where + ") @" + timestampNow());
-        cyc[pair].status = FAILED;
     }
 
     // Phase A: max throughput, one pair at a time, TX then RX (both judged vs targets).
@@ -282,6 +296,9 @@ namespace LANEXTest {
     static void evaluateAndTally(ServerConfigurationLoader::ServerConfiguration *sc,
                                  int n, PairCycle *cyc, RunSummary &sum) {
         for(int pair = 0; pair < n; pair++) {
+            // Commit this completed cycle's drop into the running count.
+            if(cyc[pair].dropped) sum.dropCycles[pair]++;
+
             if(cyc[pair].txRate > sum.peakTx[pair]) sum.peakTx[pair] = cyc[pair].txRate;
             if(cyc[pair].rxRate > sum.peakRx[pair]) sum.peakRx[pair] = cyc[pair].rxRate;
 
@@ -340,6 +357,8 @@ namespace LANEXTest {
 
             InterfaceUtils::beginTestMonitor(info);
             InterfaceUtils::setCycle(sum.cyclesCompleted + 1);
+            // Carry the running drop-cycle counts across the fresh frame.
+            for(int i = 0; i < n; i++) InterfaceUtils::updatePairDrops(i, sum.dropCycles[i]);
 
             phaseA(td, sc, tc, cyc, stop, sum);
             if(stop) break;

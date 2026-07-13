@@ -40,6 +40,7 @@ namespace InterfaceUtils {
     void updatePairRate(int pair, bool isRx, const std::string &val, int colorPair);
     void updatePairStatus(int pair, LANEXTest::PairStatus status);
     void updatePairRetry(int pair, int attempt, int maxAttempts);  // amber "retry N/M" status cell
+    void updatePairDrops(int pair, int dropCycles);                // per-pair drop-cycle count
     void drawProgressBar(const std::string &label, int pct, const std::string &subtext);
     void setTotals(int done, int failed);                       // running done / fail counts
 

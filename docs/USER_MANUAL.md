@@ -30,10 +30,9 @@ Have these ready:
 - **Your initials** (2–4 letters) — recorded on the result.
 - **The pair serial numbers**, one per pair, in the form `1234567-7654321`
   (7 digits, a dash, 7 digits).
-- **The switch serial numbers** (if the set has switches) — the **last 6 characters of each
-  switch's MAC address** (letters and/or digits, e.g. `3A9F2C`).
-- All pairs and switches **cabled and powered**.
+- All pairs **cabled and powered**.
 
+![Hook-up diagram](image.png)
 ---
 
 ## 3. Starting the tester
@@ -46,7 +45,7 @@ make run
 
 (or `./LAN-EX-Tester` if it is already built).
 
-The setup wizard starts on **Step 1 / 7**.
+The setup wizard starts on **Step 1 / 4**.
 
 > **Tip:** At almost any step you can type **`b`** and press **Enter** to go **back** and fix
 > the previous answer. The tester checks every entry and will politely re-ask if something
@@ -60,13 +59,10 @@ You'll be walked through these, one screen at a time. Type the answer, then pres
 
 | Step | Screen | What to enter | Rules |
 |------|--------|---------------|-------|
-| 1/7 | Operator initials | Your initials | 2–4 letters |
-| 2/7 | Number of pairs | How many H/F pairs | 1 to 8 |
-| 3/7 | Number of switches | How many switches | 0 to 9 *(skipped automatically if there is only 1 pair)* |
-| 4/7 | Pair serial numbers | Each pair's serial | `NNNNNNN-NNNNNNN` — 7 digits, dash, 7 digits |
-| 5/7 | Switch serial numbers | Each switch's serial | 6 letters/digits (last 6 of the MAC) *(skipped if 0 switches)* |
-| 6/7 | Green sticker check | Confirm with `y` | *(skipped if 0 switches)* |
-| 7/7 | Dip switch check | Confirm the dip settings with `y` | See the on-screen diagram |
+| 1/4 | Operator initials | Your initials | 2–4 letters |
+| 2/4 | Number of pairs | How many H/F pairs | 1 to 8 |
+| 3/4 | Pair serial numbers | Each pair's serial | `NNNNNNN-NNNNNNN` — 7 digits, dash, 7 digits |
+| 4/4 | Dip switch check | Confirm the dip settings with `y` | See the on-screen diagram |
 
 **Entering serial numbers:** you enter them one at a time. After the last one, the tester
 lists them all and asks you to **confirm**:
@@ -74,8 +70,8 @@ lists them all and asks you to **confirm**:
 - Press **`y`** to accept the list.
 - Press **`n`** to re-enter the **last** one. (To fix an earlier one, use `b` to step back.)
 
-The pair-serial screen shows a header like `Config 31: 3 pair(s), 1 switch(es)` — glance at it
-to make sure the pair/switch counts are what you expect **before** the test starts.
+The pair-serial screen shows a header like `Pairs in this set: 3` — glance at it to make sure
+the pair count is what you expect **before** the test starts.
 
 ---
 
@@ -97,16 +93,16 @@ Once connectivity passes, the live monitor appears and the test runs continuousl
 ```
   LAN-EX H/F Tester                                         LIVE  press Q to stop & report
 
-  Operator GS   Config 31   Cycle 4   Elapsed 00:14:32
+  Operator GS   Config 3 pairs   Cycle 4   Elapsed 00:14:32
 ------------------------------------------------------------------------------------------
   Phase A  max throughput - one pair at a time, 10s each direction
 ------------------------------------------------------------------------------------------
-  Pair Serial              TX Mbps     RX Mbps   Status
-  1    1234567-7654321         941         939   done
-  2    2233445-5544332         938         942   done
-  3    3344556-6655443         610           -   running
-  4    4455667-7766554        drop           -   FAIL
-  5    5566778-8877665           -           -   waiting
+  Pair Serial              TX Mbps     RX Mbps   Drops   Status
+  1    1234567-7654321         941         939       0   done
+  2    2233445-5544332         938         942       0   done
+  3    3344556-6655443         610           -       0   running
+  4    4455667-7766554        drop           -       2   FAIL
+  5    5566778-8877665           -           -       0   waiting
 
   Pair 3 TX [############--------] 62%  6s / 10s
 ------------------------------------------------------------------------------------------
@@ -121,6 +117,9 @@ Once connectivity passes, the live monitor appears and the test runs continuousl
 - **Phase line** — whether you're in **Phase A** (throughput) or **Phase B** (soak).
 - **Pair table** — one row per pair, updating live:
   - **TX Mbps / RX Mbps** — the measured speed. Green = met the target, red = below target.
+  - **Drops** — how many **cycles** this pair failed to hold a working connection in — whether it
+    dropped mid-test or couldn't connect at all — over the whole run. Stays `0` (dim) for a healthy
+    pair; turns **red** the moment it fails. Any drop = FAIL.
   - **Status** — what the pair is doing right now (see colors below).
 - **Progress bar** — the countdown for the current step (Phase A direction, or the Phase B soak).
 - **Totals** — how many pairs have finished (`done`) or failed (`fail`) this cycle, plus the
@@ -169,14 +168,16 @@ Started: 2026-07-09 14:22:07
 Ended:   2026-07-09 15:07:19
 Cycles completed: 118
 
-Pair 1 (1234567-7654321): PASS   peak TX 941 / RX 942 Mbps
-Pair 2 (2233445-5544332): FAIL   peak TX 30 / RX 80 Mbps
-Pair 3 (3344556-6655443): FAIL   peak TX 900 / RX 910 Mbps   (dropped)
+Pair 1 (1234567-7654321): PASS   peak TX 941 / RX 942 Mbps   drops: 0
+Pair 2 (2233445-5544332): FAIL   peak TX 30 / RX 80 Mbps   drops: 0
+Pair 3 (3344556-6655443): FAIL   peak TX 900 / RX 910 Mbps   drops: 3
 
 1 / 3 pairs passed
 ```
 
-`(dropped)` next to a pair means it failed because its connection dropped at least once.
+`drops:` is the number of cycles the pair had no working connection (it dropped, or couldn't
+connect at all). Any value above `0` fails the pair (Pair 2 above failed instead on speed,
+with no drops). The **Connection drops** and **Errors** sections below break down which kind.
 
 Press any key to save the reports and exit.
 
@@ -186,7 +187,9 @@ Press any key to save the reports and exit.
 
 Reports are saved automatically when you stop. They live in the **`reports/`** folder:
 
-- **Summary report** — `reports/<config>_<serial-or-switch>_<date_time>.txt`
+- **Summary report** — `reports/<N>pairs_<pair-serial>_<operator>_<date_time>.txt`
+  (e.g. `reports/3pairs_1234567-7654321_GS_20260713_140000.txt` — how many pairs, the unit
+  tested, who ran it, and when)
   Contains your initials, the configuration, the **start → end time**, cycles completed, the
   per-pair PASS/FAIL breakdown, the "X / Y pairs passed" rollup, and a list of any
   **connection drops** and **errors** that occurred — so every failure is documented.
