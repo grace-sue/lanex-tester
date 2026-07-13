@@ -92,20 +92,14 @@ namespace ReportGenerator {
         return digits.empty() ? "nodate" : digits;
     }
 
-    // Builds the report file name from the configuration: single-pair runs are keyed by
-    // the pair's serial, multi-pair runs by the first switch serial (falling back to the
-    // first pair serial if no switch was recorded). The run timestamp is appended so each
-    // run writes a unique file instead of overwriting a previous one.
+    // Builds an operator-meaningful report file name: how many pairs, which unit was tested
+    // (the first pair's serial), who ran it (operator initials), and when (run timestamp).
+    // The timestamp keeps each run's file unique instead of overwriting a previous one.
     static std::string reportBaseName(ConfigureTest::testConfiguration *tc) {
-        std::string fileName = tc->configurationName;
-        fileName += "_";
-        if(tc->numOfPairs == 1 || tc->serialNumberSwitches.empty()) {
-            fileName += tc->serialNumberPairs.empty() ? "run" : tc->serialNumberPairs[0];
-        } else {
-            fileName += tc->serialNumberSwitches[0];
-        }
-        fileName += "_" + compactTimestamp(tc->timestamp);
-        return fileName;
+        std::string count = std::to_string(tc->numOfPairs) + "pairs";
+        std::string unit = tc->serialNumberPairs.empty() ? "run" : tc->serialNumberPairs[0];
+        std::string op = tc->operatorInitials.empty() ? "NA" : tc->operatorInitials;
+        return count + "_" + unit + "_" + op + "_" + compactTimestamp(tc->timestamp);
     }
 
     std::string buildRunSummaryText(ConfigureTest::testConfiguration *tc,
@@ -126,7 +120,7 @@ namespace ReportGenerator {
                    (p ? "PASS" : "FAIL") +
                    "   peak TX " + std::to_string((int)sum.peakTx[i]) +
                    " / RX " + std::to_string((int)sum.peakRx[i]) + " Mbps" +
-                   (sum.dropped[i] ? "   (dropped)" : "") + "\n";
+                   "   drops: " + std::to_string(sum.dropCycles[i]) + "\n";
         }
         out += "\n" + std::to_string(passedPairsOut) + " / " +
                std::to_string(tc->numOfPairs) + " pairs passed";

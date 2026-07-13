@@ -17,9 +17,11 @@ namespace InterfaceUtils {
     static const int X_SERIAL = 7;
     static const int X_TX     = 25;   // numeric columns are right-aligned in their width
     static const int X_RX     = 37;
-    static const int X_STATUS = 49;
+    static const int X_DROPS  = 48;
+    static const int X_STATUS = 57;
     static const int W_SERIAL = 16;
     static const int W_RATE   = 9;
+    static const int W_DROPS  = 6;
     static const int W_STATUS = 14;
 
     static const int BAR_W = 20;
@@ -238,6 +240,7 @@ namespace InterfaceUtils {
         putField(ROW_THEAD, X_SERIAL, W_SERIAL, "Serial",  CP_DIM, false, false);
         putField(ROW_THEAD, X_TX,     W_RATE,   "TX Mbps", CP_DIM, false, true);
         putField(ROW_THEAD, X_RX,     W_RATE,   "RX Mbps", CP_DIM, false, true);
+        putField(ROW_THEAD, X_DROPS,  W_DROPS,  "Drops",   CP_DIM, false, true);
         putField(ROW_THEAD, X_STATUS, W_STATUS, "Status",  CP_DIM, false, false);
 
         // Per-pair rows: serial + placeholders + waiting status.
@@ -248,6 +251,7 @@ namespace InterfaceUtils {
             putField(y, X_SERIAL, W_SERIAL, serial, CP_DIM, false, false);
             putField(y, X_TX, W_RATE, "-", CP_DIM, false, true);
             putField(y, X_RX, W_RATE, "-", CP_DIM, false, true);
+            putField(y, X_DROPS, W_DROPS, "0", CP_DIM, false, true);
             updatePairStatus(i, LANEXTest::WAITING);
         }
 
@@ -280,6 +284,16 @@ namespace InterfaceUtils {
         int y = ROW_PAIR0 + pair;
         std::string cell = "retry " + std::to_string(attempt) + "/" + std::to_string(maxAttempts);
         putField(y, X_STATUS, W_STATUS, cell, CP_AMBER, true, false);
+        parkCursor();
+        refresh();
+    }
+
+    void updatePairDrops(int pair, int dropCycles) {
+        if(pair < 0 || pair >= M.info.numPairs) return;
+        int y = ROW_PAIR0 + pair;
+        // Any drop is a failure, so a non-zero count is highlighted red.
+        int cp = dropCycles > 0 ? CP_RED : CP_DIM;
+        putField(y, X_DROPS, W_DROPS, std::to_string(dropCycles), cp, dropCycles > 0, true);
         parkCursor();
         refresh();
     }

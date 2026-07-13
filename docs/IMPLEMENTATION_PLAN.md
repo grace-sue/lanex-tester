@@ -29,7 +29,7 @@ From the requirements doc (§2.1 Required):
 | Topic | Decision | Rationale |
 |---|---|---|
 | "Drops" meaning | **Connection drops only** — a pair losing its link during a test. Not packet loss / retransmits. | Matches the operator's real concern; a flaky link is what fails a unit. |
-| Drop → verdict | **Any drop = FAIL.** A pair fails on its first connection drop — no count, no threshold. (A drop marks the cycle FAILED, which `failCount` already captures, so the verdict is just `failCount == 0`.) | The link dropping at all means the unit isn't reliable; counting drops adds nothing. |
+| Drop → verdict | **Any drop = FAIL.** A pair fails on its first connection drop — no threshold. (A drop marks the cycle FAILED, which `failCount` already captures, so the verdict is just `failCount == 0`.) The **number of cycles the pair had no working link** — dropped mid-stream *or* couldn't connect after retries — is recorded (`dropCycles`) and shown on screen and in the report, for visibility (not for the verdict). | The link dropping at all means the unit isn't reliable; the count tells the operator *how* flaky. |
 | Protocol | **TCP throughout.** Phase B adds `-b 10m` to cap the rate. | No UDP/JSON/`Retr` parsing needed; TCP naturally finds max throughput in Phase A. |
 | Bidirectional | Phase B uses `iperf3 --bidir`. Phase A stays sequential (both directions one after another). | Literal read of the requirement. |
 | Pass/Fail scope | **Scored per pair, independently.** Each pair gets its own verdict; one pair failing has no effect on the others. There is no single cycle-wide or run-wide gate — only a rollup count (e.g. "4 / 5 pairs passed"). | On a bench testing several units at once, one flaky pair must not fail the good units tested alongside it. |
@@ -60,9 +60,14 @@ intervals. **Got "connected" + interval data, then it ended early ⇒ connection
 **Never got "connected" ⇒ setup error** (retry). The pre-test ping already confirms reachability, so a
 mid-stream death is a genuine link drop, not a cold-start hiccup.
 
-**Recording a drop:** set `dropped[pair] = true`, append a timestamped line to `dropLog`
-(`"cycle 12 · pair 3 · connection lost @14:22:07"`), show it on screen. There is **no drop count** —
-a drop marks the cycle FAILED, which is all the verdict needs.
+**Recording a drop:** `markDropCycle` flags the cycle as one with **no working link** — a real
+mid-stream drop **or** a measurement that couldn't start after retries (a persistently down pair
+would otherwise only ever count its first cycle). The flag is set once per cycle (even across both
+phases); the count is **committed in `evaluateAndTally` only when the cycle completes**, so a cycle
+discarded by `q` can't run `dropCycles` ahead of `cyclesCompleted`. The live **Drops** cell shows the
+provisional count immediately. `dropLog` (real drops) and `errorLog` (couldn't-connect) still record
+each event separately for the report. The flagged cycle is also marked FAILED — that (not the count)
+decides the verdict.
 
 **Retries knob:**
 - `retries` — re-attempts of a measurement that **couldn't start** (transient setup error). Does **not**
@@ -108,7 +113,7 @@ struct RunSummary {                // lives for the whole run
     int   cyclesCompleted = 0;
     int   passCount[MAX_PAIRS] = {0};
     int   failCount[MAX_PAIRS] = {0};
-    bool  dropped[MAX_PAIRS] = {false};       // pair lost its link at least once (any drop = fail)
+    int   dropCycles[MAX_PAIRS] = {0};        // number of cycles the pair dropped in (any drop = fail)
     float peakTx[MAX_PAIRS] = {0}, peakRx[MAX_PAIRS] = {0};
     std::vector<std::string> dropLog;    // timestamped connection-drop events
     std::vector<std::string> errorLog;   // other errors
@@ -220,9 +225,9 @@ t=30s   wall clock hits → remaining pairs stop → Phase B done
   hint), meta line (operator · config · cycle · elapsed clock), phase-label row, a per-pair table, a
   countdown/soak progress bar, and a running-totals line. Records the run start once so the elapsed
   clock spans the whole run.
-- **Table columns:** `Pair · Serial · TX Mbps · RX Mbps · Status`. The mockup's numeric **Drops**
-  column collapses into **Status** — since any drop = FAIL, a drop just paints the pair's status red
-  (`FAIL`). Numeric rate cells are colored green/red vs target in Phase A.
+- **Table columns:** `Pair · Serial · TX Mbps · RX Mbps · Drops · Status`. **Drops** is the running
+  count of cycles the pair dropped in (dim `0` when healthy, red when non-zero); **Status** goes red
+  `FAIL` on a drop. Numeric rate cells are colored green/red vs target in Phase A.
 - Updaters: `setCycle`, `refreshElapsed`, `setPhaseLine`, `updatePairRate(pair, isRx, val, color)`,
   `updatePairStatus(pair, PairStatus)`, `updatePairRetry(pair, attempt, max)`,
   `drawProgressBar(label, pct, subtext)` (ASCII bar — robust on the rig), `setTotals(done, failed)`.
@@ -246,7 +251,7 @@ folded into M6 (reports); the connectivity/ping screen keeps its existing simple
 - **`saveSummaryReport(tc, sum)`** — writes the summary file
   (`reports/<config>_<serial|switch>_<YYYYMMDD_HHMMSS>.txt` — the run timestamp keeps every run's
   file unique instead of overwriting) and appends it to `reports/allReports.txt`. Contents: accountable header (operator, config,
-  **start → end time**, cycles completed), a **per-pair verdict** (peak TX/RX, `(dropped)` marker,
+  **start → end time**, cycles completed), a **per-pair verdict** (peak TX/RX, `drops: N` count,
   PASS/FAIL), a **rollup line** ("1 / 3 pairs passed"), and **Connection drops / Errors** sections
   dumping `dropLog` + `errorLog` so failures are documented. No single all-or-nothing verdict.
 - Each pair's verdict reuses `LANEXTest::pairPassed` (`failCount == 0`); any throughput miss or drop
