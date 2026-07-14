@@ -186,8 +186,8 @@ namespace LANEXTest {
                 }));
 
                 std::string label = reversed
-                    ? ("Pair " + std::to_string(pair + 1) + " RX")
-                    : ("Pair " + std::to_string(pair + 1) + " TX");
+                    ? ("Pair " + std::to_string(pair + 1) + " H->F")
+                    : ("Pair " + std::to_string(pair + 1) + " F->H");
                 pumpFutures(futs, td, n, stop, label, dur, true, sc->retries);
 
                 IperfExecutor::IperfResult res = futs[0].get();
@@ -205,10 +205,10 @@ namespace LANEXTest {
                         InterfaceUtils::updatePairRate(pair, false, std::to_string((int)cyc[pair].txRate), color);
                     }
                 } else if(res == IperfExecutor::IPERF_RESULT_CONNECTION_DROP) {
-                    recordDrop(sum, cyc, pair, reversed ? "Phase A RX" : "Phase A TX");
+                    recordDrop(sum, cyc, pair, reversed ? "Phase A H->F" : "Phase A F->H");
                     InterfaceUtils::updatePairRate(pair, reversed, "drop", InterfaceUtils::CP_RED);
                 } else {
-                    recordError(sum, cyc, pair, reversed ? "Phase A RX" : "Phase A TX");
+                    recordError(sum, cyc, pair, reversed ? "Phase A H->F" : "Phase A F->H");
                     InterfaceUtils::updatePairRate(pair, reversed, "err", InterfaceUtils::CP_RED);
                 }
             }
@@ -280,15 +280,15 @@ namespace LANEXTest {
         int cap = sc->soakCap;
 
         InterfaceUtils::setPhaseLine("Phase B  parallel soak - all pairs at once, capped " +
-            std::to_string(cap) + " Mbps, TX then RX");
+            std::to_string(cap) + " Mbps, F->H then H->F");
         for(int pair = 0; pair < tc->numOfPairs; pair++) {
             InterfaceUtils::updatePairRate(pair, false, "-", InterfaceUtils::CP_DIM);
             InterfaceUtils::updatePairRate(pair, true, "-", InterfaceUtils::CP_DIM);
         }
 
-        soakHalf(td, sc, tc, cyc, stop, sum, false, half, cap, "TX"); // client -> server
+        soakHalf(td, sc, tc, cyc, stop, sum, false, half, cap, "F->H"); // client -> server
         if(stop) return;
-        soakHalf(td, sc, tc, cyc, stop, sum, true, half, cap, "RX");  // server -> client (-R)
+        soakHalf(td, sc, tc, cyc, stop, sum, true, half, cap, "H->F");  // server -> client (-R)
     }
 
     // Scores each pair independently for this cycle: throughput (Phase A) vs targets,

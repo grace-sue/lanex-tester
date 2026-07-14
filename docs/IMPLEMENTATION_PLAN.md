@@ -79,9 +79,9 @@ decides the verdict.
 
 **`config/targetBandwidth.conf`** — add:
 ```
-TX:90
-RX:190
-phaseDuration:5      # seconds per direction, Phase A (throughput, judged vs TX/RX)
+F->H:90               # Field->Head target (Mbps), Phase A forward direction
+H->F:190              # Head->Field target (Mbps), Phase A reverse direction
+phaseDuration:5      # seconds per direction, Phase A (throughput, judged vs F->H/H->F)
 soakDuration:30       # seconds, Phase B (capped soak, judged on connection drops only)
 soakCap:10            # Mbps per pair, Phase B
 retries:3             # immediate auto-retry attempts on a failed measurement
@@ -89,7 +89,7 @@ retries:3             # immediate auto-retry attempts on a failed measurement
 
 **`serverConfigurationLoader.h/.cpp`** — extend `ServerConfiguration` with
 `phaseDuration, soakDuration, soakCap, retries`; parse the new keys
-(same pattern as the existing `RX:`/`TX:`/`duration:` block).
+(same pattern as the existing `H->F:`/`F->H:`/`duration:` block).
 
 **New `constants.h`** — `constexpr int MAX_PAIRS = 8;` to replace the literal `8`
 hardcoded in `testData.h`, `test.cpp`, etc. *(Portability: IPs are already externalized in `config/`.)*
