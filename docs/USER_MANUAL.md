@@ -16,8 +16,9 @@ accountable.
 
 The test runs in two phases, repeated each cycle:
 
-- **Phase A — Max throughput.** Each pair is tested one at a time, first sending (TX) then
-  receiving (RX). Each direction is measured against a target speed.
+- **Phase A — Max throughput.** Each pair is tested one at a time, in both directions —
+  **F->H** (Field → Head) then **H->F** (Head → Field). Each direction is measured against a
+  target speed.
 - **Phase B — Soak.** All pairs run together at a low, capped speed for a while. This phase
   only watches for **dropped connections**.
 
@@ -32,7 +33,7 @@ Have these ready:
   (7 digits, a dash, 7 digits).
 - All pairs **cabled and powered**.
 
-![Hook-up diagram](image.png)
+![Hook-up diagram](wireup.png)
 ---
 
 ## 3. Starting the tester
@@ -97,14 +98,14 @@ Once connectivity passes, the live monitor appears and the test runs continuousl
 ------------------------------------------------------------------------------------------
   Phase A  max throughput - one pair at a time, 10s each direction
 ------------------------------------------------------------------------------------------
-  Pair Serial              TX Mbps     RX Mbps   Drops   Status
+  Pair Serial            F->H Mbps   H->F Mbps   Drops   Status
   1    1234567-7654321         941         939       0   done
   2    2233445-5544332         938         942       0   done
   3    3344556-6655443         610           -       0   running
   4    4455667-7766554        drop           -       2   FAIL
   5    5566778-8877665           -           -       0   waiting
 
-  Pair 3 TX [############--------] 62%  6s / 10s
+  Pair 3 F->H [############--------] 62%  6s / 10s
 ------------------------------------------------------------------------------------------
   Totals  done 2  fail 1      target >= 90 / 190 Mbps
 ```
@@ -116,7 +117,8 @@ Once connectivity passes, the live monitor appears and the test runs continuousl
   the run has been going (**Elapsed**).
 - **Phase line** — whether you're in **Phase A** (throughput) or **Phase B** (soak).
 - **Pair table** — one row per pair, updating live:
-  - **TX Mbps / RX Mbps** — the measured speed. Green = met the target, red = below target.
+  - **F->H Mbps / H->F Mbps** — the measured speed in each direction (Field→Head, Head→Field).
+    Green = met the target, red = below target.
   - **Drops** — how many **cycles** this pair failed to hold a working connection in — whether it
     dropped mid-test or couldn't connect at all — over the whole run. Stays `0` (dim) for a healthy
     pair; turns **red** the moment it fails. Any drop = FAIL.
@@ -153,12 +155,12 @@ Results are reported **per pair** — there is no single all-or-nothing verdict.
 
 **A pair PASSES only if, in every cycle it ran, it:**
 
-1. met **both** the TX and RX target speeds in Phase A, **and**
+1. met **both** the F->H and H->F target speeds in Phase A, **and**
 2. **never dropped** its connection (in Phase A or Phase B).
 
 **A pair FAILS if, in any cycle, it:**
 
-- came in **below target** on TX or RX, **or**
+- came in **below target** on F->H or H->F, **or**
 - **dropped its connection even once**. A single drop fails the pair.
 
 When the test stops you'll see the **Run Summary**, for example:
@@ -168,9 +170,9 @@ Started: 2026-07-09 14:22:07
 Ended:   2026-07-09 15:07:19
 Cycles completed: 118
 
-Pair 1 (1234567-7654321): PASS   peak TX 941 / RX 942 Mbps   drops: 0
-Pair 2 (2233445-5544332): FAIL   peak TX 30 / RX 80 Mbps   drops: 0
-Pair 3 (3344556-6655443): FAIL   peak TX 900 / RX 910 Mbps   drops: 3
+Pair 1 (1234567-7654321): PASS   peak F->H 941 / H->F 942 Mbps   drops: 0
+Pair 2 (2233445-5544332): FAIL   peak F->H 30 / H->F 80 Mbps   drops: 0
+Pair 3 (3344556-6655443): FAIL   peak F->H 900 / H->F 910 Mbps   drops: 3
 
 1 / 3 pairs passed
 ```
@@ -209,7 +211,7 @@ Each run gets its **own timestamped file**, so a new run never overwrites an old
 | "Pair X could not pass the preliminary test" | That pair didn't answer the ping | Check its cable and power, then press a key to retry |
 | A pair stuck on amber `retry N/M` | Its connection couldn't start; the tester is retrying | Wait — it resolves itself, or fails after the last retry |
 | A pair goes red `FAIL` with `drop` | The connection dropped during the test | Note the pair; it's recorded in the report. Check cabling/hardware for that pair |
-| A pair's TX or RX shown in red | The speed was below target | The pair fails on throughput; recorded in the report |
+| A pair's F->H or H->F shown in red | The speed was below target | The pair fails on throughput; recorded in the report |
 | The screen won't stop | You may not have pressed `q` on the test screen | Press `q` (or `Q`) while the live monitor is showing |
 
 ---

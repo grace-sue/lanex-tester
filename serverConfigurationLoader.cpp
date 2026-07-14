@@ -43,12 +43,10 @@ namespace ServerConfigurationLoader {
         std::vector<std::string> targetTransferRateFile = openFile("config/targetBandwidth.conf");
         for(int i = 0; i < targetTransferRateFile.size(); i++) {
             std::string currLine = targetTransferRateFile[i];
-            if(currLine.find("RX:") != -1){
-                currLine.erase(0, 3);
-                outConf.rxTargetSpeed = std::stof(currLine);
-            } else if(currLine.find("TX:") != -1){
-                currLine.erase(0, 3);
-                outConf.txTargetSpeed = std::stof(currLine);
+            if(currLine.find("H->F:") != std::string::npos){
+                outConf.rxTargetSpeed = std::stof(currLine.substr(currLine.find(":") + 1));
+            } else if(currLine.find("F->H:") != std::string::npos){
+                outConf.txTargetSpeed = std::stof(currLine.substr(currLine.find(":") + 1));
             } else if(currLine.find("duration:") != -1){
                 currLine.erase(0, 9);
                 outConf.duration = std::stoi(currLine);

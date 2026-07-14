@@ -118,8 +118,8 @@ namespace ReportGenerator {
             if(p) passedPairsOut++;
             out += "Pair " + std::to_string(i + 1) + " (" + tc->serialNumberPairs[i] + "): " +
                    (p ? "PASS" : "FAIL") +
-                   "   peak TX " + std::to_string((int)sum.peakTx[i]) +
-                   " / RX " + std::to_string((int)sum.peakRx[i]) + " Mbps" +
+                   "   peak F->H " + std::to_string((int)sum.peakTx[i]) +
+                   " / H->F " + std::to_string((int)sum.peakRx[i]) + " Mbps" +
                    "   drops: " + std::to_string(sum.dropCycles[i]) + "\n";
         }
         out += "\n" + std::to_string(passedPairsOut) + " / " +

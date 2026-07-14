@@ -32,7 +32,7 @@ echo "M1 — config parsing"
 # Derive the expected values from the live config file so tuning operator targets
 # doesn't break the test — it verifies the loader parses whatever is on disk.
 cfg() { grep -i "^$1:" config/targetBandwidth.conf | head -1 | cut -d: -f2; }
-EXPECT_CFG="tx=$(cfg TX) rx=$(cfg RX) phaseDuration=$(cfg phaseDuration) soakDuration=$(cfg soakDuration) soakCap=$(cfg soakCap) retries=$(cfg retries)"
+EXPECT_CFG="tx=$(cfg 'F->H') rx=$(cfg 'H->F') phaseDuration=$(cfg phaseDuration) soakDuration=$(cfg soakDuration) soakCap=$(cfg soakCap) retries=$(cfg retries)"
 check "config keys load matching config/targetBandwidth.conf" \
     "$EXPECT_CFG" \
     "$("$TMP/harness" config)"

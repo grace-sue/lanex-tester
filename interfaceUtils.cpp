@@ -238,8 +238,8 @@ namespace InterfaceUtils {
         // Table header.
         putField(ROW_THEAD, X_PAIR,   4,        "Pair",    CP_DIM, false, false);
         putField(ROW_THEAD, X_SERIAL, W_SERIAL, "Serial",  CP_DIM, false, false);
-        putField(ROW_THEAD, X_TX,     W_RATE,   "TX Mbps", CP_DIM, false, true);
-        putField(ROW_THEAD, X_RX,     W_RATE,   "RX Mbps", CP_DIM, false, true);
+        putField(ROW_THEAD, X_TX,     W_RATE,   "F->H Mbps", CP_DIM, false, true);
+        putField(ROW_THEAD, X_RX,     W_RATE,   "H->F Mbps", CP_DIM, false, true);
         putField(ROW_THEAD, X_DROPS,  W_DROPS,  "Drops",   CP_DIM, false, true);
         putField(ROW_THEAD, X_STATUS, W_STATUS, "Status",  CP_DIM, false, false);
 
