@@ -38,6 +38,13 @@ namespace IperfExecutor {
 
     IperfMessage parseIperfBuffer(std::array<char, 128> *buffer);
 
+    // Probes the remote iperf3 version once (over ssh) and remembers whether it supports
+    // --forceflush (iperf3 3.1+). Call once before the test loop; the result is cached and
+    // then read by startRemoteIperf3Client so old and new iperf3 both work. Safe default
+    // (off) if the version can't be determined, since an old iperf3 rejects the flag.
+    void detectRemoteCapabilities(std::string remoteAddress);
+    bool remoteSupportsForceflush();   // the cached result (exposed for tests)
+
     // bandwidthCap: Mbps per pair (0 = uncapped). bidir: run both directions at once (--bidir).
     IperfResult startRemoteIperf3Client(int duration, LANEXTest::testData *td, int clientId, std::string remoteAddress,
     std::string serverAddress, int serverPort, bool isReversed, int bandwidthCap = 0, bool bidir = false);

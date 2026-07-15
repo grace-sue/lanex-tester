@@ -332,6 +332,11 @@ namespace LANEXTest {
             return;
         }
 
+        // Probe the router's iperf3 version once so we only pass --forceflush to versions
+        // that support it (3.1+) — keeps both old and new routers working. The pre-test
+        // ping already confirmed the router is reachable, so this won't hang.
+        IperfExecutor::detectRemoteCapabilities(sc->clientIps[0]);
+
         InterfaceUtils::setNonBlockingInput(true);
         std::atomic<bool> stop(false);
 

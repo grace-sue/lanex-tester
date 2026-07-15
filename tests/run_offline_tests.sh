@@ -42,6 +42,10 @@ mkdir -p "$TMP/bin"
 cat > "$TMP/bin/ssh" <<'SSH'
 #!/bin/sh
 echo "$*" >> "$SSH_LOG"
+# Version probe (detectRemoteCapabilities): report the version in FAKE_IPERF_VERSION (default 3.6).
+case "$*" in
+  *"iperf3 --version"*) echo "iperf ${FAKE_IPERF_VERSION:-3.6}"; exit 0 ;;
+esac
 case "$FAKE_MODE" in
   COMPLETED)  printf 'Connecting to host\n[  5] connected to x\n[  5]   0.00-1.00   sec  100 MBytes   900 Mbits/sec\n[  5]   0.00-5.00   sec  500 MBytes   900 Mbits/sec   receiver\niperf Done.\n' ;;
   DROP)       printf 'Connecting to host\n[  5] connected to x\n[  5]   0.00-1.00   sec  100 MBytes   900 Mbits/sec\n' ;;
@@ -65,11 +69,20 @@ check "0-byte interval       -> CONNECTION_DROP" "CONNECTION_DROP" "$(FAKE_MODE=
 echo
 echo "M2 — iperf3 command flags"
 : > "$SSH_LOG"; FAKE_MODE=COMPLETED "$TMP/harness" iperf 10 1 0 >/dev/null
-check "cap + bidir (no -R)" "iperf3 -c 10.0.0.2 --port 5201 -t 5 -b 10M --bidir" \
-    "$(grep -o 'iperf3 .*' "$SSH_LOG")"
+check "cap + bidir (no -R)" "iperf3 -c 10.0.0.2 --port 5201 -t 5 --forceflush -b 10M --bidir" \
+    "$(grep -o 'iperf3 -c.*' "$SSH_LOG")"
 : > "$SSH_LOG"; FAKE_MODE=COMPLETED "$TMP/harness" iperf 0 0 1 >/dev/null
-check "reverse, uncapped"   "iperf3 -c 10.0.0.2 --port 5201 -t 5 -R" \
-    "$(grep -o 'iperf3 .*' "$SSH_LOG")"
+check "reverse, uncapped"   "iperf3 -c 10.0.0.2 --port 5201 -t 5 --forceflush -R" \
+    "$(grep -o 'iperf3 -c.*' "$SSH_LOG")"
+
+echo
+echo "M2 — --forceflush adapts to the remote iperf3 version"
+: > "$SSH_LOG"; FAKE_IPERF_VERSION=3.6 FAKE_MODE=COMPLETED "$TMP/harness" iperf 0 0 0 >/dev/null
+check "new iperf3 (3.6) -> --forceflush added" "iperf3 -c 10.0.0.2 --port 5201 -t 5 --forceflush" \
+    "$(grep -o 'iperf3 -c.*' "$SSH_LOG")"
+: > "$SSH_LOG"; FAKE_IPERF_VERSION=3.0 FAKE_MODE=COMPLETED "$TMP/harness" iperf 0 0 0 >/dev/null
+check "old iperf3 (3.0) -> no --forceflush"    "iperf3 -c 10.0.0.2 --port 5201 -t 5" \
+    "$(grep -o 'iperf3 -c.*' "$SSH_LOG")"
 
 echo
 if [ "$FAILS" -eq 0 ]; then

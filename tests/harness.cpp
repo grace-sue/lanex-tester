@@ -38,6 +38,9 @@ int main(int argc, char** argv) {
         for (int i = 0; i < MAX_PAIRS; i++) {
             td.currentRxRate[i] = td.currentTxRate[i] = td.averageRxRate[i] = td.averageTxRate[i] = -1;
         }
+        // Mirror the app: probe the (fake) remote iperf3 version so --forceflush is added
+        // only when supported.
+        IperfExecutor::detectRemoteCapabilities("10.0.0.1");
         IperfExecutor::IperfResult r =
             IperfExecutor::startRemoteIperf3Client(5, &td, 0, "10.0.0.1", "10.0.0.2", 5201, rev, cap, bidir);
         printf("%s\n", resultName(r));
