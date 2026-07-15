@@ -4,6 +4,11 @@
 namespace IperfExecutor {
     // Helper functions
     const std::string WHITESPACE = " \n\r\t\f\v";
+
+    // Whether the remote iperf3 accepts --forceflush (3.1+). Set once by
+    // detectRemoteCapabilities() before the test loop, read during it. Default off so an
+    // undetected / old iperf3 is never handed a flag it would reject.
+    static bool g_useForceflush = false;
     
     std::string ltrim(const std::string &s) {
         size_t start = s.find_first_not_of(WHITESPACE);
@@ -33,22 +38,36 @@ namespace IperfExecutor {
         return true; // Key is the same
     }
 
+    // True for an iperf3 per-stream line like "[  5] ...", "[  4] ...", "[ 10] ..." — any
+    // numeric stream id — but not the header "[ ID]" or a "[SUM]" line. Keeps interval
+    // parsing independent of which stream id a given iperf3 version happens to use.
+    bool isStreamStatLine(const std::string &line) {
+        if(line.empty() || line[0] != '[') return false;
+        size_t i = 1;
+        while(i < line.size() && line[i] == ' ') i++;
+        size_t digitStart = i;
+        while(i < line.size() && line[i] >= '0' && line[i] <= '9') i++;
+        if(i == digitStart) return false;             // no digits (e.g. "[ ID]", "[SUM]")
+        return i < line.size() && line[i] == ']';
+    }
+
     IperfMessage parseIperfBuffer(std::array<char, 128> *buffer) {
         IperfMessage outMsg;
         outMsg.type = IPERF_ERROR;
         std::string cmdStdoutLine = buffer->data();
 
         // Stats msg flag
-        if(checkFirstCharacters(buffer, "[  5]") || checkFirstCharacters(buffer, "[  4]")) {
+        if(isStreamStatLine(cmdStdoutLine)) {
             // Check for first connection stats
             if(cmdStdoutLine.find("connected to") != -1) {
                 outMsg.type = IPERF_IGNORE;
                 return outMsg;
             }
 
-            // Remove flag
-            cmdStdoutLine.erase(0, 8);
-            
+            // Remove the "[  N]" stream tag (id width varies by version, so strip up to ']')
+            cmdStdoutLine.erase(0, cmdStdoutLine.find(']') + 1);
+            cmdStdoutLine = ltrim(cmdStdoutLine);
+
             // Check if ending stats
             if(cmdStdoutLine.find("sender") != -1) {
                 outMsg.type = IPERF_COMPLETED_SENDER_STATS;
@@ -126,6 +145,38 @@ namespace IperfExecutor {
         return -1.0f;
     }
 
+    bool remoteSupportsForceflush() {
+        return g_useForceflush;
+    }
+
+    // Ask the remote iperf3 its version and cache whether it supports --forceflush (3.1+).
+    // Run once, before the (multi-threaded) test loop, so the read is race-free afterwards.
+    void detectRemoteCapabilities(std::string remoteAddress) {
+        g_useForceflush = false;   // safe default: an old iperf3 rejects the flag
+        std::string cmd =
+            "ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "
+            "-o LogLevel=ERROR -n ubnt@" + remoteAddress + " iperf3 --version 2>&1";
+
+        std::array<char, 128> buffer;
+        std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+        if(!pipe) return;
+
+        while(fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+            std::string line = buffer.data();
+            size_t p = line.find("iperf ");           // version line, e.g. "iperf 3.6 (cJSON ...)"
+            if(p == std::string::npos) continue;
+            std::string ver = line.substr(p + 6);      // "3.6 (cJSON ...)"
+            try {
+                int major = std::stoi(ver);
+                int minor = 0;
+                size_t dot = ver.find('.');
+                if(dot != std::string::npos) minor = std::stoi(ver.substr(dot + 1));
+                g_useForceflush = (major > 3) || (major == 3 && minor >= 1);
+            } catch(...) { /* leave default off */ }
+            break;
+        }
+    }
+
     IperfResult startRemoteIperf3Client(int duration, LANEXTest::testData *td, int clientId, std::string remoteAddress,
         std::string serverAddress, int serverPort, bool isReversed, int bandwidthCap, bool bidir) {
 
@@ -148,6 +199,14 @@ namespace IperfExecutor {
         cmd += std::to_string(serverPort);
         cmd += " -t ";
         cmd += std::to_string(duration);
+        // Force iperf3 to flush stdout after every interval. Over ssh (no TTY) iperf3's
+        // stdout is a pipe, which glibc block-buffers — without this, newer iperf3 (3.x)
+        // holds all interval lines until the test ends, so the live rates never update.
+        // Only added when the remote iperf3 is known to support it (3.1+), so an older
+        // iperf3 that would reject the flag still runs. See detectRemoteCapabilities().
+        if(g_useForceflush) {
+            cmd += " --forceflush";
+        }
         if(bandwidthCap > 0) {           // Phase B caps each pair (e.g. -b 10M)
             cmd += " -b ";
             cmd += std::to_string(bandwidthCap);

@@ -137,6 +137,11 @@ Keep the live `currentRxRate/currentTxRate` arrays for second-by-second UI updat
    `-2` sentinel in the rate array, so retry logic can act cleanly.
 3. Treat "stream ended without a final summary line" as a **connection drop**.
 4. *(No `Retr`, UDP, or JSON parsing — removed from the earlier draft.)*
+5. **Version adaptivity:** interval-line parsing keys off any numeric stream id (`isStreamStatLine`),
+   not a hardcoded `[  4]`/`[  5]`. `detectRemoteCapabilities()` probes `iperf3 --version` once at
+   startup and only appends `--forceflush` (needed so newer iperf3 flushes each interval over the
+   ssh pipe instead of block-buffering until the end) when the remote is 3.1+ — so old and new
+   routers both work, and live rates update in real time on the new one.
 
 This also cleans up the fragile `-2` signaling and the commented-out debug block in `iperfExecutor.cpp`.
 
