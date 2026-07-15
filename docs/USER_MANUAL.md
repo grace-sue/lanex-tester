@@ -33,7 +33,9 @@ Have these ready:
   (7 digits, a dash, 7 digits).
 - All pairs **cabled and powered**.
 
-![Hook-up diagram](wireup.png)
+![Hook-up diagram](wireup_switch.png)
+
+![Hook-up diagram](wireup_network_box.png)
 ---
 
 ## 3. Starting the tester
