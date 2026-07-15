@@ -37,7 +37,7 @@ namespace ReportGenerator {
     }
     
 
-    bool saveFile(std::string fileContent, std::string fileName) {
+    bool saveFile(std::string fileContent, std::string fileName, std::string &savedPath) {
         if(!ensureReportDirectories()) {
             return false;
         }
@@ -54,6 +54,7 @@ namespace ReportGenerator {
         fileName = directoryPrefix + sanitizeFileName(fileName);
         outLocation += fileName;
         outLocation += ".txt";
+        savedPath = outLocation;   // report the actual path to the caller
         file.open(outLocation);
         if(file.is_open()) {
             file << fileContent;
@@ -127,7 +128,8 @@ namespace ReportGenerator {
         return out;
     }
 
-    bool saveSummaryReport(ConfigureTest::testConfiguration *tc, const LANEXTest::RunSummary &sum) {
+    bool saveSummaryReport(ConfigureTest::testConfiguration *tc, const LANEXTest::RunSummary &sum,
+                           std::string &savedPath) {
         int passedPairs = 0;
         std::string body = buildRunSummaryText(tc, sum, passedPairs);
 
@@ -150,13 +152,14 @@ namespace ReportGenerator {
             for(const std::string &line : sum.errorLog) fileContent += line + "\n";
         }
 
-        if(!saveFile(fileContent, reportBaseName(tc))) {
+        if(!saveFile(fileContent, reportBaseName(tc), savedPath)) {
             return false;
         }
         return appendToAllReports(fileContent);
     }
 
-    bool saveEngReport(ConfigureTest::testConfiguration *tc, LANEXTest::testData *td, bool passed) {
+    bool saveEngReport(ConfigureTest::testConfiguration *tc, LANEXTest::testData *td, bool passed,
+                       std::string &savedPath) {
         std::string fileContent = "";
 
         fileContent += "LAN-EX F/H Tester Report\n\n";
@@ -187,7 +190,7 @@ namespace ReportGenerator {
 
         }
 
-        return saveFile(fileContent, "eng/eng_" + reportBaseName(tc));
+        return saveFile(fileContent, "eng/eng_" + reportBaseName(tc), savedPath);
     }
 
 

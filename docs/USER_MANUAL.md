@@ -181,13 +181,15 @@ Pair 3 (3344556-6655443): FAIL   peak F->H 900 / H->F 910 Mbps   drops: 3
 connect at all). Any value above `0` fails the pair (Pair 2 above failed instead on speed,
 with no drops). The **Connection drops** and **Errors** sections below break down which kind.
 
-Press any key to save the reports and exit.
+Press any key to save the reports. The tester then shows a **Reports Saved** screen with the
+exact file paths of the saved reports — press any key again to exit.
 
 ---
 
 ## 8. Where the reports go
 
-Reports are saved automatically when you stop. They live in the **`reports/`** folder:
+Reports are saved automatically when you stop, and the **Reports Saved** screen shows you the
+exact paths. They live in the **`reports/`** folder:
 
 - **Summary report** — `reports/<N>pairs_<pair-serial>_<operator>_<date_time>.txt`
   (e.g. `reports/3pairs_1234567-7654321_GS_20260713_140000.txt` — how many pairs, the unit
